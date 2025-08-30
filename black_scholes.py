@@ -70,24 +70,18 @@ class Greeks(OptionPrice):
 
 
 class Volatility:
-
-    def __init__(self, S_0, r, trading_days):
-        self.S_0 = S_0
-        self.r = r
-        self.trading_days = trading_days
+    """Class for calculating the different types of volatility"""
 
     @staticmethod
-    def implied_volatility(self, market_price, S_0, X, r, T, call=True):
+    def implied_volatility(market_price, S_0, X, r, T, call=True):
         """
-        Solve for implied volatility using the Black–Scholes model.
-
-        args:
-            market_price: observed option price
-            S0: spot price
-            X: strike price
-            r: risk-free rate
-            T: time to maturity (in years)
-            call: True for call, False for put
+        Implied Volatility calculation using the Black-Scholes model
+        :param market_price: observed option price
+        :param S_0: spot price
+        :param X: strike price
+        :param r: risk-free interest rate
+        :param T: time to maturity (years)
+        :param call: True for call, False for put
         """
 
         def d1(sigma):
@@ -111,5 +105,13 @@ class Volatility:
             return np.nan
 
     @staticmethod
-    def historic_volatility(self, prices, trading_days=252):
-        return None
+    def historic_volatility(prices, trading_days=252):
+        """
+        Calculate the historical volatility from a series of prices.
+        :param prices: daily closing prices
+        :param trading_days: number of trading days in a year
+        :return:
+        """
+        prices = np.array(prices)
+        log_returns = np.diff(np.log(prices))
+        return np.std(log_returns, ddof=1) * np.sqrt(trading_days)
