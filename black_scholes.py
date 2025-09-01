@@ -51,10 +51,10 @@ class Greeks(OptionPrice):
     def theta(self, call=True):
         term1 = (-self.S_0 * norm.pdf(self.d1) * self.sigma) / (2 * np.sqrt(self.T))
         if call:
-            term2 = self.r * self.X * np.exp(-self.r * self.T) * norm.pdf(self.d2)
+            term2 = self.r * self.X * np.exp(-self.r * self.T) * norm.cdf(self.d2)
             return term1 - term2
         else:
-            term2 = self.r * self.X * np.exp(-self.r * self.T) * norm.pdf(-self.d2)
+            term2 = self.r * self.X * np.exp(-self.r * self.T) * norm.cdf(-self.d2)
             return term1 + term2
 
     # Rho measures the rate at which the derivative changes relative to a change in the risk-free interest rate
@@ -90,7 +90,7 @@ class Volatility:
             if call:
                 return S_0 * norm.cdf(d1(sigma)) - X * np.exp(-r * T) * norm.cdf(d2(sigma))
             else:
-                return X * np.exp(-r * T) * norm.cdf(-d2(sigma)) - S_0 * np.exp(-r * T) * norm.cdf(-d1(sigma))
+                return X * np.exp(-r * T) * norm.cdf(-d2(sigma)) - S_0 * norm.cdf(-d1(sigma))
 
         def objective(sigma):
             return blackscholes_price(sigma) - market_price
