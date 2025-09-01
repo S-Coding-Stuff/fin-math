@@ -21,15 +21,11 @@ class OptionPrice:
         return self.S_0 * norm.cdf(self.d1) - self.X * np.exp(-self.r * self.T) * norm.cdf(self.d2)
 
     def put(self):
-        return self.X * np.exp(-self.r * self.T) * norm.cdf(-self.d2) - self.S_0 * np.exp(-self.r * self.T) * norm.cdf(
-            -self.d1)
+        return self.X * np.exp(-self.r * self.T) * norm.cdf(-self.d2) - self.S_0 * norm.cdf(-self.d1)
 
 
 class Greeks(OptionPrice):
     """Utilising the Greeks from the Black-Scholes formula"""
-
-    def __init__(self):
-        super(OptionPrice, self).__init__()
 
     # Delta, where call is a boolean variable to denote whether it's for a call or put option
     # Delta measures the rate of change of the theoretical option value w.r.t changes in the underlying asset's price
@@ -110,7 +106,6 @@ class Volatility:
         Calculate the historical volatility from a series of prices.
         :param prices: daily closing prices
         :param trading_days: number of trading days in a year
-        :return:
         """
         prices = np.array(prices)
         log_returns = np.diff(np.log(prices))
