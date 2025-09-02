@@ -18,7 +18,9 @@ class MarketData:
     def plotStockPrice(self, period='10y', interval='1d'):
         prices = self.getStockPrice(period=period, interval=interval)
         plt.figure(figsize=(12, 8))
-        plt.plot(prices.index, prices.values, label=f'{self.ticker} Close Price')
+        ax = plt.gca()
+        ax.set_facecolor('black')
+        plt.plot(prices.index, prices.values, label=f'{self.ticker} Close Price', color='white')
         plt.title(f'{self.ticker} Stock Price')
         plt.xlabel('Date')
         plt.ylabel('Close Price')
