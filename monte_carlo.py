@@ -7,8 +7,8 @@ class MonteCarloPricing:
         self.S_0 = S_0
         self.X = X
         self.sigma = sigma
-        self.r = r          # Risk Free rate
-        self.mu = mu        # Real-World Drift
+        self.r = r  # Risk Free rate
+        self.mu = mu  # Real-World Drift
         self.T = T
         self.num_iter = num_iter
         self.steps = steps
@@ -28,15 +28,28 @@ class MonteCarloPricing:
 
         return paths
 
-    def plot_paths(self, num_plots=20):
+    def plot_paths(self, num_plots=1):
         paths = self.simulate_paths()
         plt.figure(figsize=(12, 8))
-        for i in range(min(num_plots, self.num_iter)):
-            plt.plot(paths[:, i], lw=1, alpha=0.7)
+        if num_plots > 1:
+            for i in range(min(num_plots, self.num_iter)):
+                plt.plot(paths[:, i], lw=1, alpha=0.7)
+
+        else:
+            plt.plot(paths[:, 0], lw=2)
+            plt.scatter(len(paths) - 1, paths[-1, 0], color='red', s=10, zorder=5, label=f'{paths[-1, 0]:.2f}')
+            plt.hlines(self.S_0, 0, 252, label='Strike', color='orange', linestyle='--')
+            pl = paths[-1, 0] - self.X
+            if pl < 0:
+                plt.vlines(self.steps, paths[-1, 0], self.X, color='red', label=f'{pl:.2f}')
+            else:
+                plt.vlines(self.steps, paths[-1, 0], self.X, color='green', label=f'+{pl:.2f}')
+
         plt.title(f'Monte Carlo Simulation for {num_plots} Paths')
         plt.xlabel('Time')
         plt.ylabel('Stock Price')
         plt.grid(True)
+        plt.legend()
         plt.show()
 
     def price(self, call=True):
