@@ -2,6 +2,8 @@ import yfinance as yf
 import datetime
 from matplotlib import pyplot as plt
 
+from black_scholes import Volatility
+
 
 class MarketData:
     def __init__(self, ticker):
@@ -43,6 +45,9 @@ class MarketData:
         options = chain.calls if call else chain.puts
         strike = options['strike'].iloc[strike_index]
         sigma = options['impliedVolatility'].iloc[strike_index]
+        if sigma < 0.001 or sigma > 2 or sigma is None:
+            sigma = Volatility.historic_volatility(self._getStockPrice())
+            print(f'Falling back to Historical Volatility: {sigma:.2f}')
 
         r = self.getRiskFreeRate(T)
 
@@ -76,7 +81,3 @@ class MarketData:
         except Exception as e:
             print(f'Could not fetch Risk Free Rate: {e}. Using default 5%')
             return 0.05
-
-
-
-
