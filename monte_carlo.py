@@ -42,7 +42,7 @@ class MonteCarloPricing:
             plt.scatter(len(paths) - 1, S_T, color='red', s=10, zorder=5, label=f'{paths[-1, 0]:.2f}')
             plt.hlines(self.X, 0, self.steps, label='Strike', color='orange', linestyle='-')
 
-            payoff = max(S_T - self.X, 0) if call else max(self.X - S_T, 0)
+            # payoff = max(S_T - self.X, 0) if call else max(self.X - S_T, 0)
 
             pl = S_T - self.X if call else self.X - S_T
 
