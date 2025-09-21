@@ -18,21 +18,30 @@ class MarketData:
         return history['Close']
 
     def plotStockPrice(self, period='10y', interval='1d'):
+        import plotly.graph_objects as go
         prices = self._getStockPrice(period=period, interval=interval)
-        plt.figure(figsize=(12, 8))
-        ax = plt.gca()
-        ax.set_facecolor('black')
-        plt.plot(prices.index, prices.values, label=f'{self.ticker} Close Price', color='white')
+        fig = go.Figure()
 
-        # Show current price
-        plt.scatter(prices.index[-1], prices.iloc[-1], color='red', zorder=5, s=10, label=f'${prices.iloc[-1]:.2f}')
+        fig.add_trace(go.Scatter(
+            x=prices.index, y=prices.values,
+            mode='lines',
+            name=f'{self.ticker} Close Price'
+        ))
 
-        plt.title(f'{self.ticker} Stock Price')
-        plt.xlabel('Date')
-        plt.ylabel('Close Price')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
+        # Show only the current price as a red dot
+        fig.add_trace(go.Scatter(
+            x=[prices.index[-1]], y=[prices.iloc[-1]],
+            mode='markers',
+            marker=dict(color='red', size=10),
+            name=f'${prices.iloc[-1]:.2f}'
+        ))
+
+        fig.update_layout(
+            title=f'{self.ticker} Stock Price',
+            xaxis_title='Date',
+            yaxis_title='Close Price'
+        )
+        fig.show()
 
     def getOptionValues(self, expiry=None, call=True, strike_index=0):
         S_0 = self.getSpot()
