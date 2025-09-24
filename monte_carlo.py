@@ -84,7 +84,7 @@ class MonteCarloPricing:
 
         cashflow = payoff[-1].copy()
 
-        for t in range(n_steps - 2, 0, -1):
+        for t in range(n_steps - 2, -1, -1):
             in_the_money = payoff[t] > 0  # In-the-money paths
             if np.any(in_the_money):
                 # Regression on in-the-money paths
@@ -102,6 +102,6 @@ class MonteCarloPricing:
             cashflow[~in_the_money] *= discount
 
         # Discount to present
-        price = np.mean(cashflow * np.exp(-self.r * dt))
+        price = np.mean(cashflow)
         stderr = np.std(cashflow * np.exp(-self.r * dt)) / np.sqrt(n_paths)
         return price, stderr
