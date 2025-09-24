@@ -58,7 +58,8 @@ class MonteCarloPricing:
         plt.legend()
         plt.show()
 
-    def price(self, call=True):
+    def european(self, call=True):
+        """Price a European option using Monte Carlo simulation"""
         paths = self.simulate_paths()
         S_T = paths[-1]
         if call:
@@ -68,3 +69,39 @@ class MonteCarloPricing:
 
         discounted = np.exp(-self.r * self.T) * payoffs
         return np.mean(discounted), np.std(discounted) / np.sqrt(self.num_iter)
+    
+    def american(self, call=True):
+        """Price an American option using the Least Squares Monte Carlo (LSM) method"""
+        paths = self.simulate_paths()
+        n_steps, n_paths = paths.shape
+        dt = self.T / (n_steps - 1)
+        discount = np.exp(-self.r * dt)
+
+        if call:
+            payoff = np.maximum(paths - self.X, 0)
+        else:
+            payoff = np.maximum(self.X - paths, 0)
+
+        cashflow = payoff[-1].copy()
+
+        for t in range(n_steps - 2, 0, -1):
+            in_the_money = payoff[t] > 0  # In-the-money paths
+            if np.any(in_the_money):
+                # Regression on in-the-money paths
+                X = paths[t, in_the_money]
+                Y = cashflow[in_the_money] * discount
+                # Use simple basis: [1, S, S^2]
+                A = np.vstack([np.ones_like(X), X, X**2]).T
+                coeffs, _, _, _ = np.linalg.lstsq(A, Y, rcond=None)
+                continuation = coeffs[0] + coeffs[1]*X + coeffs[2]*X**2
+                exercise = payoff[t, in_the_money]
+
+                # Exercise if immediate payoff > continuation value
+                exercise_now = exercise > continuation
+                cashflow[in_the_money] = np.where(exercise_now, exercise, cashflow[in_the_money] * discount)
+            cashflow[~in_the_money] *= discount
+
+        # Discount to present
+        price = np.mean(cashflow * np.exp(-self.r * dt))
+        stderr = np.std(cashflow * np.exp(-self.r * dt)) / np.sqrt(n_paths)
+        return price, stderr
