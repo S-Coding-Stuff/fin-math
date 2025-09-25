@@ -99,9 +99,8 @@ class MonteCarloPricing:
                 # Exercise if immediate payoff > continuation value
                 exercise_now = exercise > continuation
                 cashflow[in_the_money] = np.where(exercise_now, exercise, cashflow[in_the_money] * discount)
-            cashflow[~in_the_money] *= discount
+            cashflow[~in_the_money] *= discount # Discount out-of-the-money paths
 
-        # Discount to present
         price = np.mean(cashflow)
         stderr = np.std(cashflow * np.exp(-self.r * dt)) / np.sqrt(n_paths)
         return price, stderr
