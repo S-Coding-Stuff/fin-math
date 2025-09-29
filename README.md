@@ -46,6 +46,7 @@ This repository implements option pricing models, ranging from classical models 
 
 ## References
 
-[1] Black, F., & Scholes, M. (1973). *The Pricing of Options and Corporate Liabilities.* Journal of Political Economy, 81(3), 637–654.  
-[2] Longstaff, F. A., & Schwartz, E. S. (2001). *Valuing American Options by Simulation: A Simple Least-Squares Approach.* Review of Financial Studies, 14(1), 113–147.  
-[3] Hull, J. C. (2018). *Options, Futures, and Other Derivatives.* 10th Edition, Pearson.  
+[1] F. Black & M. Scholes (1973). *The Pricing of Options and Corporate Liabilities.* Journal of Political Economy, 81(3), 637–654.  
+[2] F. A. Longstaff & E. S. Schwartz (2001). *Valuing American Options by Simulation: A Simple Least-Squares Approach.* Review of Financial Studies, 14(1), 113–147.  
+[3] J. C. Hull (2018). *Options, Futures, and Other Derivatives.* 10th Edition, Pearson.  
+[4] L. Clewlow & C. Strickland (2002) *Implementing Derivatives Models*

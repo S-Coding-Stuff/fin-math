@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-
 class MonteCarloPricing:
     def __init__(self, S_0, X, sigma, T, r=None, mu=None, num_iter=1000, steps=252):
         self.S_0 = S_0
@@ -13,7 +12,7 @@ class MonteCarloPricing:
         self.num_iter = num_iter
         self.steps = steps
 
-    def simulate_paths(self, risk_neutral=True):
+    def _simulate_paths(self, risk_neutral=True):
         """Simulating stock prices over time using Geometric Brownian Motion"""
         dt = self.T / self.steps
         Z = np.random.normal(size=(self.steps, self.num_iter))
@@ -28,8 +27,12 @@ class MonteCarloPricing:
 
         return paths
 
+    def simulate_paths(self, risk_neutral=True):
+        """Public wrapper kept for backwards compatibility."""
+        return self._simulate_paths(risk_neutral=risk_neutral)
+
     def plot_paths(self, num_plots=1, call=True):
-        paths = self.simulate_paths()
+        paths = self._simulate_paths()
         plt.figure(figsize=(12, 8))
 
         if num_plots > 1:
@@ -60,7 +63,7 @@ class MonteCarloPricing:
 
     def european(self, call=True):
         """Price a European option using Monte Carlo simulation"""
-        paths = self.simulate_paths()
+        paths = self._simulate_paths()
         S_T = paths[-1]
         if call:
             payoffs = np.maximum(S_T - self.X, 0)  # Basic call option payoff equation
@@ -72,7 +75,7 @@ class MonteCarloPricing:
     
     def american(self, call=True):
         """Price an American option using the Least Squares Monte Carlo (LSM) method"""
-        paths = self.simulate_paths()
+        paths = self._simulate_paths()
         n_steps, n_paths = paths.shape
         dt = self.T / (n_steps - 1)
         discount = np.exp(-self.r * dt)
