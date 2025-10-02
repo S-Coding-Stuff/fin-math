@@ -44,3 +44,10 @@ class BinomialPricing:
     def american(self, call=True):
         asset_prices, p, u, d, dt = self._build_tree()
         option_values = np.zeros((self.steps + 1, self.steps + 1))
+
+        if call:
+            pass
+        else:
+            for j in range(self.steps + 1):
+                option_values[j, self.steps] = np.maximum(0, self.K - asset_prices[j, self.steps])
+                
