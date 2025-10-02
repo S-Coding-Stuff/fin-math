@@ -1,6 +1,7 @@
 import yfinance as yf
 import datetime
 from matplotlib import pyplot as plt
+import numpy as np
 
 from black_scholes import Volatility
 
@@ -43,7 +44,7 @@ class MarketData:
         )
         fig.show()
 
-    def getOptionValues(self, expiry=None, call=True, strike_index=0):
+    def getOptionValues(self, expiry=None, call=True, strike_index=None):
         S_0 = self.getSpot()
         expiries = self.getExpiries()
         if expiry is None:
@@ -52,9 +53,23 @@ class MarketData:
 
         chain = self.stock.option_chain(expiry)
         options = chain.calls if call else chain.puts
-        strike = options['strike'].iloc[strike_index]
-        sigma = options['impliedVolatility'].iloc[strike_index]
-        if sigma < 0.001 or sigma > 2 or sigma is None:
+        if options.empty:
+            raise ValueError(f"No option data available for {self.ticker} at expiry {expiry}.")
+
+        if strike_index is None:
+            strike_idx = int(np.abs(options['strike'].to_numpy() - S_0).argmin())
+        else:
+            if strike_index < 0 or strike_index >= len(options):
+                print(
+                    f"Requested strike_index {strike_index} is out of range; using strike closest to spot instead."
+                )
+                strike_idx = int(np.abs(options['strike'].to_numpy() - S_0).argmin())
+            else:
+                strike_idx = strike_index
+
+        strike = options['strike'].iloc[strike_idx]
+        sigma = options['impliedVolatility'].iloc[strike_idx]
+        if not np.isfinite(sigma) or sigma < 0.001 or sigma > 2:
             sigma = Volatility.historic_volatility(self._getStockPrice())
             print(f'Falling back to Historical Volatility: {sigma:.2f}')
 
