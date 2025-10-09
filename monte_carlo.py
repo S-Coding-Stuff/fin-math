@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class MonteCarloPricing:
-    def __init__(self, S_0, X, sigma, T, r: float = None, mu: float = None, num_paths=1000, steps=252):
+    def __init__(self, S_0: float, X: float, sigma: float, T: float, r: float = None, mu: float = None, num_paths: int = 1000, steps: int = 252):
         self.S_0 = S_0
         self.X = X
         self.sigma = sigma
@@ -113,3 +113,5 @@ class MonteCarloPricing:
         price = np.mean(cashflow)
         stderr = np.std(cashflow * np.exp(-self.r * dt)) / np.sqrt(n_paths)
         return price, stderr
+
+__all__ = ['MonteCarloPricing']

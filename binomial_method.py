@@ -61,3 +61,5 @@ class BinomialPricing:
                 option_values[j, i] = max(intrinsic, continuation)
 
         return option_values[0, 0]
+
+__all__ = ['BinomialPricing']
