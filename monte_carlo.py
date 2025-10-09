@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class MonteCarloPricing:
-    def __init__(self, S_0, X, sigma, T, r=None, mu=None, num_paths=1000, steps=252):
+    def __init__(self, S_0, X, sigma, T, r: float = None, mu: float = None, num_paths=1000, steps=252):
         self.S_0 = S_0
         self.X = X
         self.sigma = sigma
@@ -12,7 +12,7 @@ class MonteCarloPricing:
         self.num_paths = num_paths
         self.steps = steps
 
-    def _simulate_paths(self, risk_neutral=True, Z=None):
+    def _simulate_paths(self, risk_neutral: bool = True, Z: np.ndarray | None = None):
         """Simulating stock prices over time using Geometric Brownian Motion"""
         num_paths = self.num_paths
         num_steps = self.steps
@@ -33,7 +33,7 @@ class MonteCarloPricing:
 
         return S
 
-    def simulate_paths(self, risk_neutral=True):
+    def simulate_paths(self, risk_neutral: bool = True):
         """Public wrapper kept for backwards compatibility."""
         return self._simulate_paths(risk_neutral=risk_neutral)
 
@@ -67,7 +67,7 @@ class MonteCarloPricing:
         plt.legend()
         plt.show()
 
-    def european(self, call=True):
+    def european(self, call: bool = True):
         """Price a European option using Monte Carlo simulation"""
         paths = self._simulate_paths()
         S_T = paths[-1]
@@ -78,8 +78,8 @@ class MonteCarloPricing:
 
         discounted = np.exp(-self.r * self.T) * payoffs
         return np.mean(discounted), np.std(discounted) / np.sqrt(self.num_paths)
-    
-    def american(self, call=True):
+
+    def american(self, call: bool = True):
         """Price an American option using the Least Squares Monte Carlo (LSM) method"""
         paths = self._simulate_paths()
         n_steps, n_paths = paths.shape
