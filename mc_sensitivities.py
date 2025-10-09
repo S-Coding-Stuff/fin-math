@@ -1,5 +1,4 @@
 """Pathwise Monte Carlo sensitivity estimators."""
-from __future__ import annotations
 import numpy as np
 from monte_carlo import MonteCarloPricing
 
