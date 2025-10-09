@@ -26,7 +26,7 @@ This repository implements option pricing models, ranging from classical models 
 
 ### Stage Three
 - Add Feature Engineering (log-moneyness, normalised T, volatility surface features) and their Visualisations
-- Implement Longstaff-Schwartz Monte Carlo for pricing American Options
+- ✅ Implement Longstaff-Schwartz Monte Carlo for pricing American Options
 - Add Exotic Options
 - Extend Monte Carlo approach to Bermudan and Asian Options
 
@@ -37,16 +37,10 @@ This repository implements option pricing models, ranging from classical models 
     - Support Vector Machine
 - Visualise predicted vs actual prices
 
-### Stage Five
-- Implement Deep Learning Models:
-    - MLP
-    - LSTM
-    - CNN
-- Explore and Experiment with Reinforcement Learning
-
 ## References
 
 [1] F. Black & M. Scholes (1973). *The Pricing of Options and Corporate Liabilities.* Journal of Political Economy, 81(3), 637–654.  
 [2] F. A. Longstaff & E. S. Schwartz (2001). *Valuing American Options by Simulation: A Simple Least-Squares Approach.* Review of Financial Studies, 14(1), 113–147.  
 [3] J. C. Hull (2018). *Options, Futures, and Other Derivatives.* 10th Edition, Pearson.  
 [4] L. Clewlow & C. Strickland (2002) *Implementing Derivatives Models*
+[5] P. Glasserman (2004) *Monte Carlo Methods in Financial Engineering*
