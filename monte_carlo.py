@@ -2,30 +2,36 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class MonteCarloPricing:
-    def __init__(self, S_0, X, sigma, T, r=None, mu=None, num_iter=1000, steps=252):
+    def __init__(self, S_0, X, sigma, T, r=None, mu=None, num_paths=1000, steps=252):
         self.S_0 = S_0
         self.X = X
         self.sigma = sigma
         self.r = r  # Risk Free rate
         self.mu = mu  # Real-World Drift
         self.T = T
-        self.num_iter = num_iter
+        self.num_paths = num_paths
         self.steps = steps
 
-    def _simulate_paths(self, risk_neutral=True):
+    def _simulate_paths(self, risk_neutral=True, Z=None):
         """Simulating stock prices over time using Geometric Brownian Motion"""
+        num_paths = self.num_paths
+        num_steps = self.steps
         dt = self.T / self.steps
-        Z = np.random.normal(size=(self.steps, self.num_iter))
-        paths = np.zeros((self.steps + 1, self.num_iter))
-        paths[0] = self.S_0
 
-        drift = self.r if risk_neutral else self.mu
+        if Z is None:
+            Z = np.random.standard_normal((num_steps, num_paths))
 
-        for t in range(1, self.steps + 1):
-            paths[t] = paths[t - 1] * np.exp(
-                (drift - 0.5 * self.sigma ** 2) * dt + self.sigma * np.sqrt(dt) * Z[t - 1])
+        drift_param = self.r if risk_neutral else self.mu
+        if drift_param is None:
+            raise ValueError("Set r for risk-neutral or mu for real-world simulations before calling _simulate_paths")
 
-        return paths
+        log_returns = (drift_param - 0.5 * self.sigma ** 2) * dt + self.sigma * np.sqrt(dt) * Z
+
+        S = np.empty((num_steps + 1, num_paths))
+        S[0] = self.S_0
+        S[1:] = self.S_0 * np.exp(np.cumsum(log_returns, axis=0))
+
+        return S
 
     def simulate_paths(self, risk_neutral=True):
         """Public wrapper kept for backwards compatibility."""
@@ -36,7 +42,7 @@ class MonteCarloPricing:
         plt.figure(figsize=(12, 8))
 
         if num_plots > 1:
-            for i in range(min(num_plots, self.num_iter)):
+            for i in range(min(num_plots, self.num_paths)):
                 plt.plot(paths[:, i], lw=1, alpha=0.7)
 
         else:
@@ -71,7 +77,7 @@ class MonteCarloPricing:
             payoffs = np.maximum(self.X - S_T, 0)  # Basic put option payoff equation
 
         discounted = np.exp(-self.r * self.T) * payoffs
-        return np.mean(discounted), np.std(discounted) / np.sqrt(self.num_iter)
+        return np.mean(discounted), np.std(discounted) / np.sqrt(self.num_paths)
     
     def american(self, call=True):
         """Price an American option using the Least Squares Monte Carlo (LSM) method"""
