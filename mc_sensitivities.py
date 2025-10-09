@@ -10,13 +10,11 @@ def _simulate_with_draws(mc: MonteCarloPricing, risk_neutral: bool, Z: np.ndarra
     paths = mc._simulate_paths(risk_neutral=risk_neutral, Z=Z)
     return paths, Z
 
-
-def _payoff_derivative(ST: np.ndarray, strike: float, call: bool) -> np.ndarray:
-    """Derivative of vanilla payoff wrt terminal stock (pathwise)."""
+def _payoff_derivative(S_T: np.ndarray, strike: float, call: bool) -> np.ndarray:
+    """Derivative of vanilla payoff w.r.t terminal stock (pathwise)."""
     if call:
-        return (ST > strike).astype(float)
-    return -(ST < strike).astype(float)
-
+        return (S_T > strike).astype(float)
+    return -(S_T < strike).astype(float)
 
 def pathwise_delta(mc: MonteCarloPricing, *, call: bool = True, risk_neutral: bool = True, Z: np.ndarray | None = None, return_std: bool = False):
     """Estimate delta via the pathwise derivative estimator.
@@ -26,18 +24,17 @@ def pathwise_delta(mc: MonteCarloPricing, *, call: bool = True, risk_neutral: bo
     """
 
     paths, Z = _simulate_with_draws(mc, risk_neutral, Z)
-    ST = paths[-1]
-    payoff_prime = _payoff_derivative(ST, mc.X, call)
+    S_T = paths[-1]
+    payoff_prime = _payoff_derivative(S_T, mc.X, call)
 
     discount = np.exp(-mc.r * mc.T)
-    pathwise = discount * payoff_prime * (ST / mc.S_0)
+    pathwise = discount * payoff_prime * (S_T / mc.S_0) # dS_T/dS_0 = S_T / S_0
 
     estimate = np.mean(pathwise)
     if not return_std:
         return estimate
     stderr = np.std(pathwise, ddof=1) / np.sqrt(mc.num_paths)
     return estimate, stderr
-
 
 def pathwise_vega(mc: MonteCarloPricing, *, call: bool = True, risk_neutral: bool = True, Z: np.ndarray | None = None, return_std: bool = False):
     """Estimate vega via the pathwise derivative estimator.
@@ -47,14 +44,14 @@ def pathwise_vega(mc: MonteCarloPricing, *, call: bool = True, risk_neutral: boo
     """
 
     paths, Z = _simulate_with_draws(mc, risk_neutral, Z)
-    ST = paths[-1]
-    payoff_prime = _payoff_derivative(ST, mc.X, call)
+    S_T = paths[-1]
+    payoff_prime = _payoff_derivative(S_T, mc.X, call)
 
     dt = mc.T / mc.steps
     W_T = np.sqrt(dt) * np.sum(Z, axis=0)  # Total Brownian increment per path
 
     discount = np.exp(-mc.r * mc.T)
-    pathwise = discount * payoff_prime * ST * (W_T - mc.sigma * mc.T)
+    pathwise = discount * payoff_prime * S_T * (W_T - mc.sigma * mc.T)
 
     estimate = np.mean(pathwise)
     if not return_std:
