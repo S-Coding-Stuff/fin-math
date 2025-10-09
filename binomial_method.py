@@ -16,7 +16,7 @@ class BinomialPricing:
         d = 1 / u  
         p = (np.exp(self.r * dt) - d) / (u - d) 
 
-        # Initialize asset prices at maturity
+        # Initialising asset prices at maturity
         asset_prices = np.zeros((self.steps + 1, self.steps + 1))
         for i in range(self.steps + 1):
             for j in range(i + 1):
@@ -45,9 +45,21 @@ class BinomialPricing:
         asset_prices, p, u, d, dt = self._build_tree()
         option_values = np.zeros((self.steps + 1, self.steps + 1))
 
+        # Since C(American) = C(European) for calls on non-dividend paying stocks
         if call:
-            pass
+            option_values[:, self.steps] = np.maximum(0, asset_prices[:, self.steps] - self.K)
         else:
-            for j in range(self.steps + 1):
-                option_values[j, self.steps] = np.maximum(0, self.K - asset_prices[j, self.steps])
-                
+            option_values[:, self.steps] = np.maximum(0, self.K - asset_prices[:, self.steps])
+        
+        for i in range(self.steps - 1, -1, -1):
+            for j in range(i + 1):
+                continuation = np.exp(-self.r * dt) * (
+                    p * option_values[j, i + 1] + (1 - p) * option_values[j + 1, i + 1]
+                )
+                if call:
+                    intrinsic = max(0, asset_prices[j, i] - self.K)
+                else:
+                    intrinsic = max(0, self.K - asset_prices[j, i])
+                option_values[j, i] = max(intrinsic, continuation)
+
+        return option_values[0, 0]
