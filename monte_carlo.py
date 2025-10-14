@@ -2,7 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class MonteCarloPricing:
-    def __init__(self, S_0: float, X: float, sigma: float, T: float, r: float = None, mu: float = None, num_paths: int = 1000, steps: int = 252):
+    def __init__(self, S_0: float, X: float, sigma: float, T: float, r: float = None, mu: float = None, num_paths: int = 1000, 
+                 steps: int = 252, *, rng: np.random.Generator | None = None, seed: int | None = None):
         self.S_0 = S_0
         self.X = X
         self.sigma = sigma
@@ -12,14 +13,21 @@ class MonteCarloPricing:
         self.num_paths = num_paths
         self.steps = steps
 
-    def _simulate_paths(self, risk_neutral: bool = True, Z: np.ndarray | None = None):
+        self.rng = rng if rng is not None else np.random.default_rng(seed)
+
+    def _simulate_paths(self, risk_neutral: bool = True, Z: np.ndarray | None = None, *, antithetic: bool = False) -> np.ndarray:
         """Simulating stock prices over time using Geometric Brownian Motion"""
         num_paths = self.num_paths
         num_steps = self.steps
         dt = self.T / self.steps
 
         if Z is None:
-            Z = np.random.standard_normal((num_steps, num_paths))
+            if antithetic:
+                half_paths = (num_paths + 1) // 2
+                Z_half = self.rng.standard_normal(size=(num_steps, half_paths))
+                Z = np.concatenate((Z_half, -Z_half), axis=1)[:, :num_paths]
+            else:
+                Z = self.rng.standard_normal(size=(num_steps, num_paths))
 
         drift_param = self.r if risk_neutral else self.mu
         if drift_param is None:
@@ -27,15 +35,15 @@ class MonteCarloPricing:
 
         log_returns = (drift_param - 0.5 * self.sigma ** 2) * dt + self.sigma * np.sqrt(dt) * Z
 
-        S = np.empty((num_steps + 1, num_paths))
-        S[0] = self.S_0
+        S = np.empty((num_steps + 1, num_paths), dtype=float)
+        S[0, :] = self.S_0
         S[1:] = self.S_0 * np.exp(np.cumsum(log_returns, axis=0))
 
         return S
 
-    def simulate_paths(self, risk_neutral: bool = True):
+    def simulate_paths(self, risk_neutral: bool = True, *, antithetic: bool = False):
         """Public wrapper kept for backwards compatibility."""
-        return self._simulate_paths(risk_neutral=risk_neutral)
+        return self._simulate_paths(risk_neutral=risk_neutral, antithetic=antithetic)
 
     def plot_paths(self, num_plots=1, call=True):
         paths = self._simulate_paths()
@@ -111,7 +119,7 @@ class MonteCarloPricing:
             cashflow[~in_the_money] *= discount # Discount out-of-the-money paths
 
         price = np.mean(cashflow)
-        stderr = np.std(cashflow * np.exp(-self.r * dt)) / np.sqrt(n_paths)
+        stderr = np.std(cashflow) / np.sqrt(n_paths) # Corrected standard error
         return price, stderr
 
 __all__ = ['MonteCarloPricing']
