@@ -3,12 +3,12 @@ import matplotlib.pyplot as plt
 
 class BinomialPricing:
     def __init__(self, S_0: float, K: float, r: float, sigma: float, T: float, steps: int):
-        self.S_0 = S_0  
-        self.K = K      
-        self.r = r      
+        self.S_0 = S_0
+        self.K = K
+        self.r = r
         self.sigma = sigma
-        self.T = T      
-        self.steps = steps  
+        self.T = T
+        self.steps = steps
 
     def _build_tree(self):
         dt = self.T / self.steps
