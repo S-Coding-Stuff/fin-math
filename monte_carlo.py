@@ -15,7 +15,8 @@ class MonteCarloPricing:
 
         self.rng = rng if rng is not None else np.random.default_rng(seed)
 
-    def _simulate_paths(self, risk_neutral: bool = True, Z: np.ndarray | None = None, *, antithetic: bool = False) -> np.ndarray:
+    def _simulate_paths(self, risk_neutral: bool = True, Z: np.ndarray | None = None, 
+                        *, antithetic: bool = False) -> np.ndarray:
         """Simulating stock prices over time using Geometric Brownian Motion"""
         num_paths = self.num_paths
         num_steps = self.steps
@@ -41,12 +42,12 @@ class MonteCarloPricing:
 
         return S
 
-    def simulate_paths(self, risk_neutral: bool = True, *, antithetic: bool = False):
+    def simulate_paths(self, risk_neutral: bool = True, *, antithetic: bool = True):
         """Public wrapper kept for backwards compatibility."""
         return self._simulate_paths(risk_neutral=risk_neutral, antithetic=antithetic)
 
-    def plot_paths(self, num_plots=1, call=True):
-        paths = self._simulate_paths()
+    def plot_paths(self, num_plots: int = 1, call: bool = True, *, antithetic: bool = True):
+        paths = self._simulate_paths(antithetic=antithetic) # Antithetic Variates Method used while plotting
         plt.figure(figsize=(12, 8))
 
         if num_plots > 1:
@@ -75,9 +76,9 @@ class MonteCarloPricing:
         plt.legend()
         plt.show()
 
-    def european(self, call: bool = True):
+    def european(self, call: bool = True, *, antithetic: bool = True):
         """Price a European option using Monte Carlo simulation"""
-        paths = self._simulate_paths()
+        paths = self._simulate_paths(antithetic=antithetic)
         S_T = paths[-1]
         if call:
             payoffs = np.maximum(S_T - self.X, 0)  # Basic call option payoff equation
@@ -87,9 +88,9 @@ class MonteCarloPricing:
         discounted = np.exp(-self.r * self.T) * payoffs
         return np.mean(discounted), np.std(discounted) / np.sqrt(self.num_paths)
 
-    def american(self, call: bool = True):
+    def american(self, call: bool = True, *, antithetic: bool = True):
         """Price an American option using the Least Squares Monte Carlo (LSM) method"""
-        paths = self._simulate_paths()
+        paths = self._simulate_paths(antithetic=antithetic)
         n_steps, n_paths = paths.shape
         dt = self.T / (n_steps - 1)
         discount = np.exp(-self.r * dt)
