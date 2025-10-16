@@ -1,6 +1,6 @@
-# 📈 Financial Mathematics - Options Pricing
+# 📈 Financial Mathematics - Options Pricing Dissertation Code
 
-This repository implements option pricing models, ranging from classical models to newer machine learning models.
+This repository implements option pricing models, ranging from classical models to newer machine learning models. 
 
 ## Features
 
