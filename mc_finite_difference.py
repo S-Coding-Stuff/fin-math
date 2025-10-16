@@ -5,13 +5,13 @@ from dataclasses import dataclass
 
 from monte_carlo import MonteCarloPricing
 
-@dataclass
 class MonteCarloFiniteDifference:
     """Finite-difference Greeks that reuse a Monte Carlo pricer and common random numbers."""
-    pricer: MonteCarloPricing
-    call: bool = True
-    antithetic: bool = True
-    risk_neutral: bool = True
+    def __init__(self, pricer: MonteCarloPricing, call: bool = True, antithetic: bool = True, risk_neutral: bool = True):
+        self.pricer = pricer
+        self.call = call
+        self.antithetic = antithetic
+        self.risk_neutral = risk_neutral
 
     # Bump sizes for finite difference
     S0_bump: float = 1e-2  # For delta and gamma
@@ -148,3 +148,5 @@ class FiniteDifference:
         plt.ylabel("f''(x)")
         plt.grid()
         plt.show()
+
+__all_ = ['MonteCarloFiniteDifference']
