@@ -2,24 +2,29 @@ import yfinance as yf
 import datetime
 from matplotlib import pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
 
 from black_scholes import Volatility
 
 
 class MarketData:
-    def __init__(self, ticker):
+    def __init__(self, ticker: str):
         self.ticker = ticker
         self.stock = yf.Ticker(ticker)
 
-    def getSpot(self):
+    def getSpot(self) -> float:
         return self.stock.history(period="1d")['Close'].iloc[-1]
 
     def _getStockPrice(self, period='10y', interval='1d'):
+        """
+        Fetch historical close prices as a pandas Series so callers can
+        access both dates (index) and values. Use `.to_numpy()` if you only
+        need the raw array.
+        """
         history = self.stock.history(period=period, interval=interval)
         return history['Close']
 
     def plotStockPrice(self, period='10y', interval='1d'):
-        import plotly.graph_objects as go
         prices = self._getStockPrice(period=period, interval=interval)
         fig = go.Figure()
 
@@ -70,7 +75,7 @@ class MarketData:
         strike = options['strike'].iloc[strike_idx]
         sigma = options['impliedVolatility'].iloc[strike_idx]
         if not np.isfinite(sigma) or sigma < 0.001 or sigma > 2:
-            sigma = Volatility.historic_volatility(self._getStockPrice())
+            sigma = Volatility.historic_volatility(self._getStockPrice().to_numpy())
             print(f'Falling back to Historical Volatility: {sigma:.2f}')
 
         r = self.getRiskFreeRate(T)
