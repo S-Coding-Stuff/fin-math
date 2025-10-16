@@ -17,7 +17,7 @@ class MonteCarloPricing:
 
     def _simulate_paths(self, risk_neutral: bool = True, Z: np.ndarray | None = None, 
                         *, antithetic: bool = False) -> np.ndarray:
-        """Simulating stock prices over time using Geometric Brownian Motion"""
+        """Simulate stock prices over time using geometric Brownian motion."""
         num_paths = self.num_paths
         num_steps = self.steps
         dt = self.T / self.steps
@@ -42,8 +42,8 @@ class MonteCarloPricing:
 
         return S
 
-    def simulate_paths(self, risk_neutral: bool = True, *, antithetic: bool = True):
-        """Public wrapper kept for backwards compatibility."""
+    def simulate_paths(self, risk_neutral: bool = True, *, antithetic: bool = True) -> np.ndarray:
+        """Generate GBM paths; antithetic variates are on by default for variance reduction."""
         return self._simulate_paths(risk_neutral=risk_neutral, antithetic=antithetic)
 
     def plot_paths(self, num_plots: int = 1, call: bool = True, *, antithetic: bool = True):
@@ -76,8 +76,11 @@ class MonteCarloPricing:
         plt.legend()
         plt.show()
 
-    def european(self, call: bool = True, *, antithetic: bool = True):
-        """Price a European option using Monte Carlo simulation"""
+    def european(self, call: bool = True, *, antithetic: bool = True) -> tuple[float, float]:
+        """Price a European option via Monte Carlo (returns mean price and standard error)."""
+        if self.r is None:
+            raise ValueError("Risk-free rate r must be set before pricing under the risk-neutral measure.")
+
         paths = self._simulate_paths(antithetic=antithetic)
         S_T = paths[-1]
         if call:
@@ -88,8 +91,11 @@ class MonteCarloPricing:
         discounted = np.exp(-self.r * self.T) * payoffs
         return np.mean(discounted), np.std(discounted) / np.sqrt(self.num_paths)
 
-    def american(self, call: bool = True, *, antithetic: bool = True):
-        """Price an American option using the Least Squares Monte Carlo (LSM) method"""
+    def american(self, call: bool = True, *, antithetic: bool = True) -> tuple[float, float]:
+        """Price an American option using the Least Squares Monte Carlo method."""
+        if self.r is None:
+            raise ValueError("Risk-free rate r must be set before pricing under the risk-neutral measure.")
+
         paths = self._simulate_paths(antithetic=antithetic)
         n_steps, n_paths = paths.shape
         dt = self.T / (n_steps - 1)
