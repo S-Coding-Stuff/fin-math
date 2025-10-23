@@ -1,26 +1,27 @@
 import numpy as np
-import matplotlib.pyplot as plt
 
 class MonteCarloPricing:
-    def __init__(self, S_0: float, X: float, sigma: float, T: float, r: float = None, mu: float = None, num_paths: int = 1000, 
-                 steps: int = 252, *, rng: np.random.Generator | None = None, seed: int | None = None):
+    def __init__(self, S_0: float, X: float, sigma: float, T: float, r: float = None, mu: float = None, 
+                 num_paths: int = 1000, steps: int = 252, *, rng: np.random.Generator | None = None, 
+                 seed: int | None = None):
         self.S_0 = S_0
         self.X = X
         self.sigma = sigma
         self.r = r  # Risk Free rate
         self.mu = mu  # Real-World Drift
-        self.T = T
+        self.T = T # Time to maturity in years
         self.num_paths = num_paths
         self.steps = steps
+        self.div = 0.0  # Dividend yield, set to 0 for now, will update later if needed to facilitate
 
         self.rng = rng if rng is not None else np.random.default_rng(seed)
 
     def _simulate_paths(self, risk_neutral: bool = True, Z: np.ndarray | None = None, 
                         *, antithetic: bool = False) -> np.ndarray:
-        """Simulate stock prices over time using geometric Brownian motion."""
+        """Simulate stock prices over time using Geometric Brownian Motion."""
         num_paths = self.num_paths
         num_steps = self.steps
-        dt = self.T / self.steps
+        dt = self.T / self.steps # Step size
 
         if Z is None:
             if antithetic:
@@ -34,7 +35,7 @@ class MonteCarloPricing:
         if drift_param is None:
             raise ValueError("Set r for risk-neutral or mu for real-world simulations before calling _simulate_paths")
 
-        log_returns = (drift_param - 0.5 * self.sigma ** 2) * dt + self.sigma * np.sqrt(dt) * Z
+        log_returns = (drift_param - self.div - 0.5 * self.sigma ** 2) * dt + self.sigma * np.sqrt(dt) * Z
 
         S = np.empty((num_steps + 1, num_paths), dtype=float)
         S[0, :] = self.S_0
@@ -47,6 +48,7 @@ class MonteCarloPricing:
         return self._simulate_paths(risk_neutral=risk_neutral, antithetic=antithetic)
 
     def plot_paths(self, num_plots: int = 1, call: bool = True, *, antithetic: bool = True):
+        import matplotlib.pyplot as plt
         paths = self._simulate_paths(antithetic=antithetic) # Antithetic Variates Method used while plotting
         plt.figure(figsize=(12, 8))
 
@@ -91,7 +93,7 @@ class MonteCarloPricing:
         discounted = np.exp(-self.r * self.T) * payoffs
         return np.mean(discounted), np.std(discounted) / np.sqrt(self.num_paths)
 
-    def american(self, call: bool = True, *, antithetic: bool = True) -> tuple[float, float]:
+    def american(self, call: bool = True, basis_fn: str = "laguerre", *, antithetic: bool = True) -> tuple[float, float]:
         """Price an American option using the Least Squares Monte Carlo method."""
         if self.r is None:
             raise ValueError("Risk-free rate r must be set before pricing under the risk-neutral measure.")
@@ -106,18 +108,26 @@ class MonteCarloPricing:
         else:
             payoff = np.maximum(self.X - paths, 0)
 
-        cashflow = payoff[-1].copy()
+        cashflow = payoff[-1].copy() # Copy of terminal payoffs
 
         for t in range(n_steps - 2, -1, -1):
             in_the_money = payoff[t] > 0  # In-the-money paths
             if np.any(in_the_money):
                 # Regression on in-the-money paths
-                X = paths[t, in_the_money]
-                Y = cashflow[in_the_money] * discount
-                # Use simple basis: [1, S, S^2]
-                A = np.vstack([np.ones_like(X), X, X**2]).T
-                coeffs, _, _, _ = np.linalg.lstsq(A, Y, rcond=None)
-                continuation = coeffs[0] + coeffs[1]*X + coeffs[2]*X**2
+                S_t = paths[t, in_the_money]
+                Y = cashflow[in_the_money] * discount # One step discounted value of continuing from t to t+1
+
+                if basis_fn == "monomial":
+                    basis = np.vander(S_t, N=3, increasing=True) # Monomial basis function of degree 2 built using Vandermonde matrix
+                elif basis_fn == "laguerre":
+                    x = (S_t / self.X).astype(float) # Normalise stock prices by strike price
+                    basis = np.exp(-x[:, None] / 2) * np.polynomial.laguerre.lagvander(x, 3) # Laguerre polynomial basis of degree 2
+                elif basis_fn == "hermite":
+                    basis = np.polynomial.hermite.hermvander(S_t, 3) # Hermite polynomial basis of degree 2
+                else:
+                    raise ValueError(f"Unknown basis function: {basis_fn}")
+                coeffs, *_ = np.linalg.lstsq(basis, Y, rcond=None)
+                continuation = basis @ coeffs # Dot product of basis and coeffs
                 exercise = payoff[t, in_the_money]
 
                 # Exercise if immediate payoff > continuation value
