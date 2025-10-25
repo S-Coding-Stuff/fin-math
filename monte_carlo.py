@@ -93,8 +93,10 @@ class MonteCarloPricing:
         discounted = np.exp(-self.r * self.T) * payoffs
         return np.mean(discounted), np.std(discounted) / np.sqrt(self.num_paths)
 
-    def american(self, call: bool = True, basis_fn: str = "laguerre", *, antithetic: bool = True) -> tuple[float, float]:
+    def american(self, call: bool = True, basis_fn: str = "laguerre", *, antithetic: bool = True,
+                 return_diagnostics: bool = False) -> tuple[float, float] | tuple[float, float, dict[str, np.ndarray]]:
         """Price an American option using the Least Squares Monte Carlo method."""
+        
         if self.r is None:
             raise ValueError("Risk-free rate r must be set before pricing under the risk-neutral measure.")
 
@@ -109,6 +111,9 @@ class MonteCarloPricing:
             payoff = np.maximum(self.X - paths, 0)
 
         cashflow = payoff[-1].copy() # Copy of terminal payoffs
+        immediate = payoff[:-1].copy()
+        continuation_est = np.full((n_steps - 1, n_paths), np.nan)
+        exercise_time = np.full(n_paths, -1, dtype=int)
 
         for t in range(n_steps - 2, -1, -1):
             in_the_money = payoff[t] > 0  # In-the-money paths
@@ -130,13 +135,83 @@ class MonteCarloPricing:
                 continuation = basis @ coeffs # Dot product of basis and coeffs
                 exercise = payoff[t, in_the_money]
 
+                continuation_est[t, in_the_money] = continuation
+
                 # Exercise if immediate payoff > continuation value
                 exercise_now = exercise > continuation
+                in_indices = np.where(in_the_money)[0]
+                exercise_paths = in_indices[exercise_now]
+                exercise_time[exercise_paths] = t
                 cashflow[in_the_money] = np.where(exercise_now, exercise, cashflow[in_the_money] * discount)
             cashflow[~in_the_money] *= discount # Discount out-of-the-money paths
 
         price = np.mean(cashflow)
         stderr = np.std(cashflow) / np.sqrt(n_paths) # Corrected standard error
+        if not return_diagnostics:
+            return price, stderr
+
+        exercise_mask = np.zeros((n_steps - 1, n_paths), dtype=bool)
+        valid = exercise_time >= 0
+        exercise_mask[exercise_time[valid], np.where(valid)[0]] = True
+        diagnostics = {
+            "paths": paths,
+            "time_grid": np.linspace(0.0, self.T, n_steps),
+            "exercise_mask": exercise_mask,
+            "exercise_time": exercise_time,
+            "immediate_payoff": immediate,
+            "continuation_estimate": continuation_est,
+        }
+        return price, stderr, diagnostics
+
+    def plot_american_exercise(self, call: bool = True, basis_fn: str = "laguerre", *, antithetic: bool = True,
+                               max_paths: int | None = 500, show_boundary: bool = True,
+                               figsize: tuple[float, float] = (10, 6)) -> tuple[float, float]:
+        """Plot simulated paths with optimal exercise decisions highlighted."""
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError as exc:
+            raise ImportError("plot_american_exercise requires matplotlib to be installed.") from exc
+
+        price, stderr, diagnostics = self.american(call=call, basis_fn=basis_fn, antithetic=antithetic,
+                                                   return_diagnostics=True)
+
+        paths = diagnostics["paths"]
+        time_grid = diagnostics["time_grid"]
+        exercise_mask = diagnostics["exercise_mask"]
+        n_steps, n_paths = paths.shape
+
+        if max_paths is None or max_paths >= n_paths:
+            path_indices = np.arange(n_paths)
+        else:
+            path_indices = np.arange(max_paths)
+
+        plt.figure(figsize=figsize)
+        for idx in path_indices:
+            plt.plot(time_grid, paths[:, idx], color="gray", alpha=0.15, linewidth=0.8)
+
+        mask_subset = exercise_mask[:, path_indices]
+        if mask_subset.any():
+            t_idx, p_idx = np.nonzero(mask_subset)
+            plt.scatter(time_grid[:-1][t_idx], paths[t_idx, path_indices[p_idx]],
+                        c="red", s=20, alpha=0.6, label="Exercise decision")
+
+        if show_boundary:
+            boundary = np.full(exercise_mask.shape[0], np.nan)
+            for t in range(exercise_mask.shape[0]):
+                exercised_states = paths[t, exercise_mask[t]]
+                if exercised_states.size:
+                    boundary[t] = np.mean(exercised_states)
+            if not np.all(np.isnan(boundary)):
+                plt.plot(time_grid[:-1], boundary, color="red", linewidth=2.0, label="Average exercise level")
+
+        plt.axhline(self.X, color="orange", linestyle="--", linewidth=1.2, label="Strike")
+        plt.title("American option exercise profile")
+        plt.xlabel("Time")
+        plt.ylabel("Underlying price")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.show()
+
         return price, stderr
 
 __all__ = ['MonteCarloPricing']
