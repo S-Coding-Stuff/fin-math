@@ -27,8 +27,16 @@ This repository implements option pricing models, ranging from classical models 
 ### Stage Three
 - Add Feature Engineering (log-moneyness, normalised T, volatility surface features) and their Visualisations
 - ✅ Implement Longstaff-Schwartz Monte Carlo for pricing American Options
-- Add Exotic Options
+- ✅ Implement Antithetic Variates
+- ✅ Provide different bases - Monomial, Laguerre, Hermite, Legendre polynomials
 - Extend Monte Carlo approach to Bermudan and Asian Options
+
+### Stage Four
+- Implement Quasi-Monte Carlo - Research for understanding:
+  - Bounds of a high-dimensional hypercube
+  - Koksma-Hlawka Inequality
+  - Lattice Rules
+  - Faure, Halton, Sobol Sequences
 
 ### Stage Four
 - Implement Machine Learning Models:
