@@ -4,7 +4,7 @@ from scipy.stats import norm
 
 
 class OptionPrice:
-    """Pricing an option using the Black Scholes formula"""
+    """Pricing a European option using the Black Scholes formula"""
 
     def __init__(self, S_0, X, r, sigma, T):
         self.S_0 = S_0  # Spot price at time 0
