@@ -115,6 +115,8 @@ class MonteCarloPricing:
         continuation_est = np.full((n_steps - 1, n_paths), np.nan)
         exercise_time = np.full(n_paths, -1, dtype=int)
 
+        # Why use different weights??? Might have likelihood of trajectories. They are all polynomials, why would you use
+        # different weights or variables?
         for t in range(n_steps - 2, -1, -1):
             in_the_money = payoff[t] > 0  # In-the-money paths
             if np.any(in_the_money):
