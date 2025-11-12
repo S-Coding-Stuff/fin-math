@@ -52,9 +52,42 @@ class MonteCarloFiniteDifference:
         """Draw and return normal variates to be reused across all bumps.
 
         Implementation detail: In a variance-reduced FD, all bumped prices should
-        use the exact same random shocks. This method should handle antithetic
-        pairing if enabled. To be implemented during development."""
-        raise NotImplementedError
+        use the exact same random shocks. This method handles antithetic
+        pairing."""
+        steps = int(self.pricer.steps)
+        paths = int(self.pricer.num_paths)
+
+        # Prefer a QMC-aware draw if the pricer provides one (e.g., QuasiMonteCarloPricing)
+        draw_fn = getattr(self.pricer, "_draw_normals", None)
+        if callable(draw_fn):
+            count = (paths + 1) // 2 if self.antithetic else paths
+            normals = draw_fn(count)  # expected shape: (steps, count)
+            if normals.shape != (steps, count):
+                # Safety: transpose common alternative shape
+                if normals.shape == (count, steps):
+                    normals = normals.T
+                else:
+                    raise ValueError(
+                        f"_draw_normals returned shape {normals.shape}, expected ({steps}, {count})."
+                    )
+            if self.antithetic:
+                normals = np.concatenate((normals, -normals), axis=1)[:, :paths]
+            return normals
+
+        # Fallback to pseudo-random normals from the pricer's RNG, preserving RNG state
+        rng = self.pricer.rng
+        state = rng.bit_generator.state
+        try:
+            if self.antithetic:
+                half = (paths + 1) // 2
+                z_half = rng.standard_normal(size=(steps, half))
+                Z = np.concatenate((z_half, -z_half), axis=1)[:, :paths]
+            else:
+                Z = rng.standard_normal(size=(steps, paths))
+        finally:
+            # Restore RNG state so this draw doesn't perturb subsequent randomness elsewhere
+            rng.bit_generator.state = state
+        return Z
 
     def _price(
         self,

@@ -1,7 +1,7 @@
 """Helper functions to exercise MC sensitivity routines from notebooks."""
 import numpy as np
-from monte_carlo import MonteCarloPricing
-from mc_sensitivities import pathwise_delta, pathwise_vega
+from engines.monte_carlo import MonteCarloPricing
+from greeks.mc_sensitivities import pathwise_delta, pathwise_vega
 
 
 def run_pricer_and_sensitivities(
