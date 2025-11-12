@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
 
-from black_scholes import Volatility
+from models.black_scholes import Volatility
 
 
 class MarketData:
