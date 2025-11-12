@@ -38,7 +38,7 @@ This repository implements option pricing models, ranging from classical models 
   - Lattice Rules
   - Faure, Halton, Sobol Sequences
 
-### Stage Six
+### Stage Five
 - Develop methods for finding sensitivities:
   - Finite Difference Black-Scholes for understanding
   - Finite Difference Method for Monte Carlo
