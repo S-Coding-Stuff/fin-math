@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 from typing import Callable
 from dataclasses import dataclass
 
-from monte_carlo import MonteCarloPricing
-from black_scholes import OptionPrice
+from engines.monte_carlo import MonteCarloPricing
+from models.black_scholes import OptionPrice
 
 # Basic Finite Difference Class for mathematical understanding
 class FiniteDifference:

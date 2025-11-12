@@ -6,7 +6,7 @@ import numpy as np
 from scipy.stats import norm
 from scipy.stats.qmc import Sobol
 
-from monte_carlo import MonteCarloPricing
+from engines.monte_carlo import MonteCarloPricing
 
 
 class QuasiMonteCarloPricing(MonteCarloPricing):
