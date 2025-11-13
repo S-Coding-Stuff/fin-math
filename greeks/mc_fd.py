@@ -6,16 +6,12 @@ for development into a robust implementation; methods are stubbed with clear
 interfaces and documentation."""
 
 from __future__ import annotations
-
-from dataclasses import dataclass
 from typing import Dict, Iterable, Optional
 
 import numpy as np
 
 from engines.monte_carlo import MonteCarloPricing
 
-
-@dataclass
 class BumpConfig:
     """Configuration for finite-difference bump sizes.
 
