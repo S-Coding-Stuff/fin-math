@@ -1,4 +1,118 @@
+from __future__ import annotations
+
+from typing import Literal, Optional
+
 import numpy as np
+
+BasisName = Literal["laguerre", "monomial", "hermite"]
+
+class LSMConfig:
+    def __init__(self, *, basis: BasisName = "laguerre", include_all_paths: bool = True,
+                 mask_tolerance: float = 0.0) -> None:
+        self.basis = basis
+        self.include_all_paths = bool(include_all_paths)
+        self.mask_tolerance = float(mask_tolerance)
+
+
+def immediate_payoff(paths: np.ndarray, *, strike: float, call: bool) -> np.ndarray:
+    if call:
+        return np.maximum(paths - strike, 0.0)
+    return np.maximum(strike - paths, 0.0)
+
+
+def build_mask(paths: np.ndarray, *, strike: float, call: bool, include_all: bool, tolerance: float) -> np.ndarray:
+    if include_all:
+        return np.ones((paths.shape[0] - 1, paths.shape[1]), dtype=bool)
+
+    payoff = immediate_payoff(paths, strike=strike, call=call)
+    mask = payoff[:-1] > 0.0
+    if tolerance > 0.0:
+        states = paths[:-1]
+        mask |= np.abs(states - strike) <= tolerance
+    return mask
+
+
+def lsm_basis(states: np.ndarray, *, strike: float, basis: BasisName) -> np.ndarray:
+    flattened = np.ravel(states)
+    if flattened.size == 0:
+        return np.zeros((0, 3))
+    if basis == "monomial":
+        return np.vander(flattened, N=3, increasing=True)
+    if basis == "hermite":
+        return np.polynomial.hermite.hermvander(flattened, 3)
+    if basis != "laguerre":
+        raise ValueError(f"Unsupported basis '{basis}'.")
+    normalized = (flattened / strike).astype(float, copy=False)
+    return np.exp(-normalized[:, None] / 2.0) * np.polynomial.laguerre.lagvander(normalized, 3)
+
+
+def _lsm_cashflows(paths: np.ndarray, *, strike: float, call: bool, rate: float, maturity: float,
+                   config: LSMConfig, mask: Optional[np.ndarray] = None, capture_mask: bool = False,
+                   capture_diagnostics: bool = False) -> tuple[np.ndarray, Optional[np.ndarray], Optional[dict[str, np.ndarray]]]:
+    n_steps, n_paths = paths.shape
+    if n_steps < 2:
+        raise ValueError("Need at least one time step for American valuation.")
+    if maturity <= 0.0:
+        raise ValueError("Maturity must be positive for American valuation.")
+
+    dt = maturity / (n_steps - 1)
+    discount = np.exp(-rate * dt)
+
+    payoff = immediate_payoff(paths, strike=strike, call=call)
+    cashflow = payoff[-1].copy()
+    expected = (n_steps - 1, n_paths)
+    if mask is not None:
+        mask_to_use = np.asarray(mask, dtype=bool)
+        if mask_to_use.shape != expected:
+            raise ValueError(f"Continuation mask must have shape {expected}, received {mask_to_use.shape}.")
+    else:
+        mask_to_use = build_mask(paths, strike=strike, call=call, 
+                                 include_all=config.include_all_paths,
+                                 tolerance=config.mask_tolerance)
+
+    continuation_est = None
+    exercise_time = None
+    immediate_payoff_slice = None
+    if capture_diagnostics:
+        continuation_est = np.full((n_steps - 1, n_paths), np.nan)
+        exercise_time = np.full(n_paths, -1, dtype=int)
+        immediate_payoff_slice = payoff[:-1].copy()
+
+    for t in range(n_steps - 2, -1, -1):
+        include = mask_to_use[t]
+        if np.any(include):
+            states = paths[t, include]
+            continuation_targets = cashflow[include] * discount
+            basis = lsm_basis(states, strike=strike, basis=config.basis)
+            coeffs, *_ = np.linalg.lstsq(basis, continuation_targets, rcond=None)
+            continuation = basis @ coeffs
+            exercise = payoff[t, include]
+            exercise_now = exercise > continuation
+            idx = np.where(include)[0]
+            cashflow[idx] = np.where(exercise_now, exercise, cashflow[idx] * discount)
+
+            if capture_diagnostics:
+                continuation_est[t, include] = continuation
+                exercise_time[idx[exercise_now]] = t
+        cashflow[~include] *= discount
+
+    diagnostics = None
+    if capture_diagnostics:
+        assert continuation_est is not None and exercise_time is not None and immediate_payoff_slice is not None
+        exercise_mask = np.zeros((n_steps - 1, n_paths), dtype=bool)
+        valid = exercise_time >= 0
+        exercise_mask[exercise_time[valid], np.where(valid)[0]] = True
+        diagnostics = {
+            "paths": paths,
+            "time_grid": np.linspace(0.0, maturity, n_steps),
+            "exercise_mask": exercise_mask,
+            "exercise_time": exercise_time,
+            "immediate_payoff": immediate_payoff_slice,
+            "continuation_estimate": continuation_est,
+        }
+
+    mask_return = mask_to_use.copy() if capture_mask else None
+    return cashflow, mask_return, diagnostics
 
 class MonteCarloPricing:
     def __init__(self, S_0: float, X: float, sigma: float, T: float, r: float = None, mu: float = None, 
@@ -94,76 +208,106 @@ class MonteCarloPricing:
         return np.mean(discounted), np.std(discounted) / np.sqrt(self.num_paths)
 
     def american(self, call: bool = True, basis_fn: str = "laguerre", *, antithetic: bool = True,
-                 return_diagnostics: bool = False) -> tuple[float, float] | tuple[float, float, dict[str, np.ndarray]]:
-        """Price an American option using the Least Squares Monte Carlo method."""
-        
+                 include_all_paths: bool = True, mask_tolerance: float = 0.0,
+                 continuation_mask: Optional[np.ndarray] = None, paths: Optional[np.ndarray] = None,
+                 return_diagnostics: bool = False, return_mask: bool = False
+                 ) -> tuple:
+        """Price an American option using the Least Squares Monte Carlo method.
+
+        Parameters beyond the classic signature provide hooks for advanced workflows:
+        - include_all_paths/mask_tolerance control the regression mask construction.
+        - continuation_mask allows supplying a precomputed ITM mask (e.g., from an unbumped run).
+        - paths may be pre-simulated using shared random draws.
+        - return_mask surfaces the regression mask alongside the diagnostics if requested.
+        """
+
         if self.r is None:
             raise ValueError("Risk-free rate r must be set before pricing under the risk-neutral measure.")
 
-        paths = self._simulate_paths(antithetic=antithetic)
+        if paths is None:
+            paths = self._simulate_paths(antithetic=antithetic)
         n_steps, n_paths = paths.shape
-        dt = self.T / (n_steps - 1)
-        discount = np.exp(-self.r * dt)
 
-        if call:
-            payoff = np.maximum(paths - self.X, 0)
-        else:
-            payoff = np.maximum(self.X - paths, 0)
+        config = LSMConfig(
+            basis=basis_fn,
+            include_all_paths=include_all_paths,
+            mask_tolerance=mask_tolerance,
+        )
+        capture_diag = return_diagnostics
+        capture_mask = return_mask
+        cashflow, mask_out, diagnostics = _lsm_cashflows(
+            paths,
+            strike=self.X,
+            call=call,
+            rate=self.r,
+            maturity=self.T,
+            config=config,
+            mask=continuation_mask,
+            capture_mask=capture_mask,
+            capture_diagnostics=capture_diag,
+        )
 
-        cashflow = payoff[-1].copy() # Copy of terminal payoffs
-        immediate = payoff[:-1].copy()
-        continuation_est = np.full((n_steps - 1, n_paths), np.nan)
-        exercise_time = np.full(n_paths, -1, dtype=int)
+        price = float(np.mean(cashflow))
+        ddof = 1 if n_paths > 1 else 0
+        stderr = float(np.std(cashflow, ddof=ddof) / np.sqrt(n_paths))
+        result: list = [price, stderr]
+        if return_diagnostics:
+            result.append(diagnostics if diagnostics is not None else {})
+        if return_mask:
+            if mask_out is None:
+                mask_out = build_mask(
+                    paths,
+                    strike=self.X,
+                    call=call,
+                    include_all=include_all_paths,
+                    tolerance=mask_tolerance,
+                )
+            result.append(mask_out)
+        return tuple(result)
 
-        # Why use different weights??? Might have likelihood of trajectories. They are all polynomials, why would you use
-        # different weights or variables?
-        for t in range(n_steps - 2, -1, -1):
-            in_the_money = payoff[t] > 0  # In-the-money paths
-            if np.any(in_the_money):
-                # Regression on in-the-money paths
-                S_t = paths[t, in_the_money]
-                Y = cashflow[in_the_money] * discount # One step discounted value of continuing from t to t+1
+    def american_cashflows(self, paths: np.ndarray, *, call: bool = True, basis_fn: str = "laguerre",
+                            include_all_paths: bool = True, mask_tolerance: float = 0.0,
+                            mask: Optional[np.ndarray] = None, return_mask: bool = False,
+                            return_diagnostics: bool = False):
+        """Direct access to discounted American cashflows for custom workflows."""
 
-                if basis_fn == "monomial":
-                    basis = np.vander(S_t, N=3, increasing=True) # Monomial basis function of degree 2 built using Vandermonde matrix
-                elif basis_fn == "laguerre":
-                    x = (S_t / self.X).astype(float) # Normalise stock prices by strike price
-                    basis = np.exp(-x[:, None] / 2) * np.polynomial.laguerre.lagvander(x, 3) # Laguerre polynomial basis of degree 2
-                elif basis_fn == "hermite":
-                    basis = np.polynomial.hermite.hermvander(S_t, 3) # Hermite polynomial basis of degree 2
-                else:
-                    raise ValueError(f"Unknown basis function: {basis_fn}")
-                coeffs, *_ = np.linalg.lstsq(basis, Y, rcond=None)
-                continuation = basis @ coeffs # Dot product of basis and coeffs
-                exercise = payoff[t, in_the_money]
+        if self.r is None:
+            raise ValueError("Risk-free rate r must be set before running American LSM cashflows.")
 
-                continuation_est[t, in_the_money] = continuation
-
-                # Exercise if immediate payoff > continuation value
-                exercise_now = exercise > continuation
-                in_indices = np.where(in_the_money)[0]
-                exercise_paths = in_indices[exercise_now]
-                exercise_time[exercise_paths] = t
-                cashflow[in_the_money] = np.where(exercise_now, exercise, cashflow[in_the_money] * discount)
-            cashflow[~in_the_money] *= discount # Discount out-of-the-money paths
-
-        price = np.mean(cashflow)
-        stderr = np.std(cashflow) / np.sqrt(n_paths) # Corrected standard error
-        if not return_diagnostics:
-            return price, stderr
-
-        exercise_mask = np.zeros((n_steps - 1, n_paths), dtype=bool)
-        valid = exercise_time >= 0
-        exercise_mask[exercise_time[valid], np.where(valid)[0]] = True
-        diagnostics = {
-            "paths": paths,
-            "time_grid": np.linspace(0.0, self.T, n_steps),
-            "exercise_mask": exercise_mask,
-            "exercise_time": exercise_time,
-            "immediate_payoff": immediate,
-            "continuation_estimate": continuation_est,
-        }
-        return price, stderr, diagnostics
+        config = LSMConfig(
+            basis=basis_fn,
+            include_all_paths=include_all_paths,
+            mask_tolerance=mask_tolerance,
+        )
+        capture_mask = return_mask
+        capture_diag = return_diagnostics
+        cashflow, mask_out, diagnostics = _lsm_cashflows(
+            paths,
+            strike=self.X,
+            call=call,
+            rate=self.r,
+            maturity=self.T,
+            config=config,
+            mask=mask,
+            capture_mask=capture_mask,
+            capture_diagnostics=capture_diag,
+        )
+        outputs: list = [cashflow]
+        if return_diagnostics:
+            outputs.append(diagnostics if diagnostics is not None else {})
+        if return_mask:
+            if mask_out is None:
+                mask_out = build_mask(
+                    paths,
+                    strike=self.X,
+                    call=call,
+                    include_all=include_all_paths,
+                    tolerance=mask_tolerance,
+                )
+            outputs.append(mask_out)
+        if len(outputs) == 1:
+            return outputs[0]
+        return tuple(outputs)
 
     def plot_american_exercise(self, call: bool = True, basis_fn: str = "laguerre", *, antithetic: bool = True,
                                max_paths: int | None = 500, show_boundary: bool = True,
