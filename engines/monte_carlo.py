@@ -210,8 +210,7 @@ class MonteCarloPricing:
     def american(self, call: bool = True, basis_fn: str = "laguerre", *, antithetic: bool = True,
                  include_all_paths: bool = True, mask_tolerance: float = 0.0,
                  continuation_mask: Optional[np.ndarray] = None, paths: Optional[np.ndarray] = None,
-                 return_diagnostics: bool = False, return_mask: bool = False
-                 ) -> tuple:
+                 return_diagnostics: bool = False, return_mask: bool = False) -> tuple:
         """Price an American option using the Least Squares Monte Carlo method.
 
         Parameters beyond the classic signature provide hooks for advanced workflows:
@@ -228,24 +227,12 @@ class MonteCarloPricing:
             paths = self._simulate_paths(antithetic=antithetic)
         n_steps, n_paths = paths.shape
 
-        config = LSMConfig(
-            basis=basis_fn,
-            include_all_paths=include_all_paths,
-            mask_tolerance=mask_tolerance,
-        )
+        config = LSMConfig(basis=basis_fn, include_all_paths=include_all_paths, mask_tolerance=mask_tolerance)
         capture_diag = return_diagnostics
         capture_mask = return_mask
-        cashflow, mask_out, diagnostics = _lsm_cashflows(
-            paths,
-            strike=self.X,
-            call=call,
-            rate=self.r,
-            maturity=self.T,
-            config=config,
-            mask=continuation_mask,
-            capture_mask=capture_mask,
-            capture_diagnostics=capture_diag,
-        )
+        cashflow, mask_out, diagnostics = _lsm_cashflows(paths, strike=self.X, call=call, rate=self.r, maturity=self.T,
+                                                         config=config, mask=continuation_mask, capture_mask=capture_mask,
+                                                         capture_diagnostics=capture_diag)
 
         price = float(np.mean(cashflow))
         ddof = 1 if n_paths > 1 else 0
@@ -274,36 +261,19 @@ class MonteCarloPricing:
         if self.r is None:
             raise ValueError("Risk-free rate r must be set before running American LSM cashflows.")
 
-        config = LSMConfig(
-            basis=basis_fn,
-            include_all_paths=include_all_paths,
-            mask_tolerance=mask_tolerance,
-        )
+        config = LSMConfig(basis=basis_fn, include_all_paths=include_all_paths, mask_tolerance=mask_tolerance)
         capture_mask = return_mask
         capture_diag = return_diagnostics
-        cashflow, mask_out, diagnostics = _lsm_cashflows(
-            paths,
-            strike=self.X,
-            call=call,
-            rate=self.r,
-            maturity=self.T,
-            config=config,
-            mask=mask,
-            capture_mask=capture_mask,
-            capture_diagnostics=capture_diag,
-        )
+        cashflow, mask_out, diagnostics = _lsm_cashflows(paths, strike=self.X, call=call, rate=self.r, maturity=self.T,
+                                                         config=config, mask=mask, capture_mask=capture_mask,
+                                                         capture_diagnostics=capture_diag)
         outputs: list = [cashflow]
         if return_diagnostics:
             outputs.append(diagnostics if diagnostics is not None else {})
         if return_mask:
             if mask_out is None:
-                mask_out = build_mask(
-                    paths,
-                    strike=self.X,
-                    call=call,
-                    include_all=include_all_paths,
-                    tolerance=mask_tolerance,
-                )
+                mask_out = build_mask(paths, strike=self.X, call=call, include_all=include_all_paths,
+                                      tolerance=mask_tolerance)
             outputs.append(mask_out)
         if len(outputs) == 1:
             return outputs[0]
@@ -311,7 +281,7 @@ class MonteCarloPricing:
 
     def plot_american_exercise(self, call: bool = True, basis_fn: str = "laguerre", *, antithetic: bool = True,
                                max_paths: int | None = 500, show_boundary: bool = True,
-                               figsize: tuple[float, float] = (10, 6)) -> tuple[float, float]:
+                               figsize: tuple[float, float] = (10, 6)):
         """Plot simulated paths with optimal exercise decisions highlighted."""
         try:
             import matplotlib.pyplot as plt
