@@ -40,8 +40,8 @@ This repository implements option pricing models, ranging from classical models 
 
 ### Stage Five
 - Develop methods for finding sensitivities:
-  - Finite Difference Black-Scholes for understanding
-  - Finite Difference Method for Monte Carlo
+  - ✅ Finite Difference Black-Scholes for understanding
+  - ✅ Finite Difference Method for Monte Carlo
   - Pathwise Derivative Estimates
   - (Extra) Likelihood Ratio Method
 
