@@ -128,7 +128,15 @@ class MonteCarloPricing:
         self.steps = steps
         self.div = 0.0  # Dividend yield, set to 0 for now, will update later if needed to facilitate
 
+        # If a seed is supplied (and no custom rng), remember it so each pricing call can
+        # reset to the same random stream for deterministic results.
+        self._seed = None if rng is not None else seed
         self.rng = rng if rng is not None else np.random.default_rng(seed)
+
+    def _reset_rng(self) -> None:
+        """Recreate the RNG from the stored seed when one was provided."""
+        if self._seed is not None:
+            self.rng = np.random.default_rng(self._seed)
 
     def _simulate_paths(self, risk_neutral: bool = True, Z: np.ndarray | None = None, 
                         *, antithetic: bool = False) -> np.ndarray:
@@ -138,6 +146,7 @@ class MonteCarloPricing:
         dt = self.T / self.steps # Step size
 
         if Z is None:
+            self._reset_rng()
             if antithetic:
                 half_paths = (num_paths + 1) // 2
                 Z_half = self.rng.standard_normal(size=(num_steps, half_paths))
@@ -242,13 +251,8 @@ class MonteCarloPricing:
             result.append(diagnostics if diagnostics is not None else {})
         if return_mask:
             if mask_out is None:
-                mask_out = build_mask(
-                    paths,
-                    strike=self.X,
-                    call=call,
-                    include_all=include_all_paths,
-                    tolerance=mask_tolerance,
-                )
+                mask_out = build_mask(paths, strike=self.X, call=call, include_all=include_all_paths,
+                                      tolerance=mask_tolerance)
             result.append(mask_out)
         return tuple(result)
 
