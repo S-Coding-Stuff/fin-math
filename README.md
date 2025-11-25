@@ -29,7 +29,6 @@ This repository implements option pricing models, ranging from classical models 
 - ✅ Implement Longstaff-Schwartz Monte Carlo for pricing American Options
 - ✅ Implement Antithetic Variates
 - ✅ Provide different bases - Monomial, Laguerre, Hermite, Legendre polynomials
-- Extend Monte Carlo approach to Bermudan and Asian Options
 
 ### Stage Four
 - Implement Quasi-Monte Carlo - Research for understanding:
@@ -51,6 +50,10 @@ This repository implements option pricing models, ranging from classical models 
     - Random Forest
     - Support Vector Machine
 - Visualise predicted vs actual prices
+
+### Extension(s)
+- Extend to multi-dimensional Amerian options i.e. vector/tensor inputs rather than single-asset
+- Exotic Options - Bermudan Options, Shout/Chooser-lite, European Digital, Asian
 
 ## References
 
