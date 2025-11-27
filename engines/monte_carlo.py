@@ -87,7 +87,9 @@ def _lsm_cashflows(paths: np.ndarray, *, strike: float, call: bool, rate: float,
             coeffs, *_ = np.linalg.lstsq(basis, continuation_targets, rcond=None)
             continuation = basis @ coeffs
             exercise = payoff[t, include]
-            exercise_now = exercise > continuation
+            # Only allow exercise when the payoff is strictly positive
+            # to avoid spurious "exercise" decisions for out-of-the-money states.
+            exercise_now = (exercise > 0.0) & (exercise > continuation)
             idx = np.where(include)[0]
             cashflow[idx] = np.where(exercise_now, exercise, cashflow[idx] * discount)
 

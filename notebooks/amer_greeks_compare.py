@@ -35,39 +35,15 @@ def binomial_greeks(*, S_0: float, K: float, r: float, sigma: float, T: float, s
     }
 
 
-def mc_greeks(
-    *,
-    S_0: float,
-    K: float,
-    r: float,
-    sigma: float,
-    T: float,
-    call: bool,
-    num_paths: int,
-    steps: int,
-    seed: int,
-) -> Dict[str, float]:
+def mc_greeks(*, S_0: float, K: float, r: float, sigma: float, T: float, call: bool,
+              num_paths: int, steps: int, seed: int) -> Dict[str, float]:
     """Finite-difference Greeks via Monte Carlo LSM (American)."""
     rng = np.random.default_rng(seed)
-    pricer = MonteCarloPricing(
-        S_0=S_0,
-        X=K,
-        sigma=sigma,
-        T=T,
-        r=r,
-        num_paths=num_paths,
-        steps=steps,
-        rng=rng,
-    )
-    mc_fd = MonteCarloFiniteDifference(
-        pricer,
-        call=call,
-        antithetic=True,
-        risk_neutral=True,
-        style="american",
-        basis_fn="laguerre",
-        include_all_paths=True,
-    )
+    pricer = MonteCarloPricing(S_0=S_0, X=K, sigma=sigma, T=T, r=r, num_paths=num_paths,
+                               steps=steps, rng=rng)
+    mc_fd = MonteCarloFiniteDifference(pricer, call=call, antithetic=True,
+                                       risk_neutral=True, style="american",
+                                       basis_fn="laguerre", include_all_paths=True)
     return {
         "delta": mc_fd.greek("delta"),
         "gamma": mc_fd.greek("gamma"),

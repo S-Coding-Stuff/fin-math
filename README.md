@@ -13,6 +13,10 @@ This repository implements option pricing models, ranging from classical models 
 - 🖼️ **Path Visualisation** and Payoff Plotting
 - 👨‍💻 **Data Gathering** for Stocks and their respective Options
 
+![American put optimal exercise boundary](assets/us_put_optimal_exercise.png)
+
+*Average optimal exercise level for an American put estimated via Longstaff–Schwartz Monte Carlo.*
+
 ## 🛣️ Roadmap
 ### Stage One
 - ✅ Implement Black-Scholes model for European Call and Put Options
