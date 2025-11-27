@@ -5,8 +5,11 @@ This repository implements option pricing models, ranging from classical models 
 ## Features
 
 - 📉 **Black Scholes Model** (European Calls and Puts)
-- 📊 **Greeks** (Delta, Gamma, Vega, Theta, Rho)
+- 🌲 **Binomial Tree Pricing** for European and American options
 - 🎰 **Monte Carlo Pricing** with Geometric Brownian Motion
+- 🧮 **American Option Pricing (Longstaff–Schwartz)** with monomial and polynomial regression bases
+- 🎯 **Quasi-Monte Carlo Drivers** (Sobol, Faure, Halton-style sequences) with Brownian bridge
+- 📐 **Sensitivity Methods**: finite-difference Greeks for Black–Scholes, Binomial and Monte Carlo
 - 🖼️ **Path Visualisation** and Payoff Plotting
 - 👨‍💻 **Data Gathering** for Stocks and their respective Options
 
@@ -21,7 +24,7 @@ This repository implements option pricing models, ranging from classical models 
 ### Stage Two
 - Expand Market Data:
   - ✅ Clean Bad Implied Volatilities (fall back to Historic Volatilities)
-  -  Select near-the-money strikes
+  - ✅ Select near-the-money strikes
 -  Compare model prices vs market quotes
 
 ### Stage Three
@@ -35,13 +38,13 @@ This repository implements option pricing models, ranging from classical models 
   - ✅ Bounds of a high-dimensional hypercube
   - ✅ Koksma-Hlawka Inequality
   - Lattice Rules
-  - Faure, Halton, Sobol Sequences
+  - ✅ Faure, Halton, Sobol Sequences
 
 ### Stage Five
 - Develop methods for finding sensitivities:
   - ✅ Finite Difference Black-Scholes for understanding
   - ✅ Finite Difference Method for Monte Carlo
-  - Pathwise Derivative Estimates
+  - ✅ Pathwise Derivative Estimates
   - (Extra) Likelihood Ratio Method
 
 ### Stage Six
@@ -53,6 +56,7 @@ This repository implements option pricing models, ranging from classical models 
 
 ### Extension(s)
 - Extend to multi-dimensional Amerian options i.e. vector/tensor inputs rather than single-asset
+- Create more realistic setups - Dividends, Transaction Costs, Stochastic Interest Rates
 - Exotic Options - Bermudan Options, Shout/Chooser-lite, European Digital, Asian
 
 ## References
