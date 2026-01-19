@@ -197,7 +197,7 @@ class MonteCarloPricing:
                 plt.vlines(self.steps, self.X, S_T, color='green', label=f'+{pl:.2f}')
 
         plt.title(f'Monte Carlo Simulation for {num_plots} Paths')
-        plt.xlabel('Time')
+        plt.xlabel('Step')
         plt.ylabel('Stock Price')
         plt.grid(True)
         plt.legend()
@@ -298,9 +298,9 @@ class MonteCarloPricing:
                                                    return_diagnostics=True)
 
         paths = diagnostics["paths"]
-        time_grid = diagnostics["time_grid"]
         exercise_mask = diagnostics["exercise_mask"]
         n_steps, n_paths = paths.shape
+        step_grid = np.arange(n_steps)
 
         if max_paths is None or max_paths >= n_paths:
             path_indices = np.arange(n_paths)
@@ -309,12 +309,12 @@ class MonteCarloPricing:
 
         plt.figure(figsize=figsize)
         for idx in path_indices:
-            plt.plot(time_grid, paths[:, idx], color="gray", alpha=0.15, linewidth=0.8)
+            plt.plot(step_grid, paths[:, idx], color="gray", alpha=0.15, linewidth=0.8)
 
         mask_subset = exercise_mask[:, path_indices]
         if mask_subset.any():
             t_idx, p_idx = np.nonzero(mask_subset)
-            plt.scatter(time_grid[:-1][t_idx], paths[t_idx, path_indices[p_idx]],
+            plt.scatter(t_idx, paths[t_idx, path_indices[p_idx]],
                         c="red", s=20, alpha=0.6, label="Exercise decision")
 
         if show_boundary:
@@ -324,11 +324,11 @@ class MonteCarloPricing:
                 if exercised_states.size:
                     boundary[t] = np.mean(exercised_states)
             if not np.all(np.isnan(boundary)):
-                plt.plot(time_grid[:-1], boundary, color="red", linewidth=2.0, label="Average exercise level")
+                plt.plot(step_grid[:-1], boundary, color="red", linewidth=2.0, label="Average exercise level")
 
         plt.axhline(self.X, color="orange", linestyle="--", linewidth=1.2, label="Strike")
         plt.title("American option exercise profile")
-        plt.xlabel("Time")
+        plt.xlabel("Step")
         plt.ylabel("Underlying price")
         plt.legend()
         plt.grid(True, alpha=0.3)
