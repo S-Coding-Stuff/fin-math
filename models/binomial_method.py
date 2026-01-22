@@ -13,8 +13,9 @@ class BinomialPricing:
     def _build_tree(self):
         dt = self.T / self.steps
         u = np.exp(self.sigma * np.sqrt(dt))
-        d = np.exp(-self.sigma * np.sqrt(dt)) 
-        p = (1/2) + ((self.r - 0.5 * self.sigma**2) * np.sqrt(dt) / (2 * self.sigma))
+        d = np.exp(-self.sigma * np.sqrt(dt))
+        # CRR risk-neutral probability to match the drift under Q
+        p = (np.exp(self.r * dt) - d) / (u - d)
 
         # Initialising asset prices at maturity
         asset_prices = np.zeros((self.steps + 1, self.steps + 1))
