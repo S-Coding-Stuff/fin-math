@@ -18,31 +18,15 @@ class MLPResult:
     stderr: float
 
 
-def american_mlp_pricing(
-    *,
-    S0: float,
-    K: float,
-    r: float,
-    sigma: float,
-    T: float,
-    num_paths: int,
-    steps: int,
-    call: bool = True,
-    seed: int | None = None,
-    include_all_paths: bool = False,
-    mask_tolerance: float = 0.0,
-    antithetic: bool = False,
-    hidden_sizes: tuple[int, ...] = (32, 32),
-    lr: float = 1e-3,
-    epochs: int = 50,
-    batch_size: int = 256,
-    scale_inputs: bool = True,
-    min_samples: int = 8,
-) -> MLPResult:
+def american_mlp_pricing(*, S0: float, K: float, r: float, sigma: float, T: float,
+                         num_paths: int, steps: int, call: bool = True, 
+                         seed: int | None = None, include_all_paths: bool = False,
+                         mask_tolerance: float = 0.0, antithetic: bool = False,
+                         hidden_sizes: tuple[int, ...] = (32, 32), lr: float = 1e-3,
+                         epochs: int = 50, batch_size: int = 256, 
+                         scale_inputs: bool = True, min_samples: int = 8) -> MLPResult:
     """Price an American option using LSM with a simple PyTorch MLP.
-
-    Requires torch to be installed. The MLP is fit separately at each
-    exercise time using in-sample continuation cashflows.
+    The MLP is fit separately at each exercise time using in-sample continuation cashflows.
     """
     try:
         import torch
@@ -66,16 +50,8 @@ def american_mlp_pricing(
     if seed is not None:
         torch.manual_seed(seed)
 
-    pricer = MonteCarloPricing(
-        S_0=S0,
-        X=K,
-        sigma=sigma,
-        T=T,
-        r=r,
-        num_paths=num_paths,
-        steps=steps,
-        seed=seed,
-    )
+    pricer = MonteCarloPricing(S_0=S0, X=K, sigma=sigma, T=T, r=r, 
+                               num_paths=num_paths, steps=steps, seed=seed)
 
     paths = pricer._simulate_paths(antithetic=antithetic)
     n_steps, n_paths = paths.shape
@@ -88,13 +64,8 @@ def american_mlp_pricing(
     payoff = immediate_payoff(paths, strike=K, call=call)
     cashflow = payoff[-1].copy()
 
-    mask = build_mask(
-        paths,
-        strike=K,
-        call=call,
-        include_all=include_all_paths,
-        tolerance=mask_tolerance,
-    )
+    mask = build_mask(paths, strike=K, call=call, include_all=include_all_paths,
+                      tolerance=mask_tolerance)
 
     def _build_mlp() -> nn.Module:
         layers: list[nn.Module] = []
