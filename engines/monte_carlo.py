@@ -4,14 +4,17 @@ from typing import Literal, Optional
 
 import numpy as np
 
-BasisName = Literal["laguerre", "monomial", "hermite"]
+BasisName = Literal["laguerre", "monomial", "hermite", "nn"]
 
 class LSMConfig:
     def __init__(self, *, basis: BasisName = "laguerre", include_all_paths: bool = True,
-                 mask_tolerance: float = 0.0) -> None:
+                 mask_tolerance: float = 0.0, nn_kwargs: Optional[dict] = None,
+                 seed: int | None = None) -> None:
         self.basis = basis
         self.include_all_paths = bool(include_all_paths)
         self.mask_tolerance = float(mask_tolerance)
+        self.nn_kwargs = {} if nn_kwargs is None else dict(nn_kwargs)
+        self.seed = seed
 
 
 def immediate_payoff(paths: np.ndarray, *, strike: float, call: bool) -> np.ndarray:
@@ -36,6 +39,8 @@ def lsm_basis(states: np.ndarray, *, strike: float, basis: BasisName) -> np.ndar
     flattened = np.ravel(states)
     if flattened.size == 0:
         return np.zeros((0, 3))
+    if basis == "nn":
+        raise ValueError("Neural network basis must be handled via the NN regressor.")
     if basis == "monomial":
         return np.vander(flattened, N=3, increasing=True)
     if basis == "hermite":
@@ -83,9 +88,19 @@ def _lsm_cashflows(paths: np.ndarray, *, strike: float, call: bool, rate: float,
         if np.any(include):
             states = paths[t, include]
             continuation_targets = cashflow[include] * discount
-            basis = lsm_basis(states, strike=strike, basis=config.basis)
-            coeffs, *_ = np.linalg.lstsq(basis, continuation_targets, rcond=None)
-            continuation = basis @ coeffs
+            if config.basis == "nn":
+                from engines.lsm_regressors import estimate_continuation_nn
+
+                continuation = estimate_continuation_nn(
+                    states,
+                    continuation_targets,
+                    seed=config.seed,
+                    **config.nn_kwargs,
+                )
+            else:
+                basis = lsm_basis(states, strike=strike, basis=config.basis)
+                coeffs, *_ = np.linalg.lstsq(basis, continuation_targets, rcond=None)
+                continuation = basis @ coeffs
             exercise = payoff[t, include]
             # Only allow exercise when the payoff is strictly positive
             # to avoid spurious "exercise" decisions for out-of-the-money states.
@@ -218,10 +233,11 @@ class MonteCarloPricing:
         discounted = np.exp(-self.r * self.T) * payoffs
         return np.mean(discounted), np.std(discounted) / np.sqrt(self.num_paths)
 
-    def american(self, call: bool = True, basis_fn: str = "laguerre", *, antithetic: bool = True,
+    def american(self, call: bool = True, basis_fn: BasisName = "laguerre", *, antithetic: bool = True,
                  include_all_paths: bool = True, mask_tolerance: float = 0.0,
                  continuation_mask: Optional[np.ndarray] = None, paths: Optional[np.ndarray] = None,
-                 return_diagnostics: bool = False, return_mask: bool = False) -> tuple:
+                 return_diagnostics: bool = False, return_mask: bool = False,
+                 nn_kwargs: Optional[dict] = None) -> tuple:
         """Price an American option using the Least Squares Monte Carlo method.
 
         Parameters beyond the classic signature provide hooks for advanced workflows:
@@ -238,7 +254,14 @@ class MonteCarloPricing:
             paths = self._simulate_paths(antithetic=antithetic)
         n_steps, n_paths = paths.shape
 
-        config = LSMConfig(basis=basis_fn, include_all_paths=include_all_paths, mask_tolerance=mask_tolerance)
+        basis = basis_fn.lower() if isinstance(basis_fn, str) else basis_fn
+        config = LSMConfig(
+            basis=basis,
+            include_all_paths=include_all_paths,
+            mask_tolerance=mask_tolerance,
+            nn_kwargs=nn_kwargs,
+            seed=self._seed,
+        )
         capture_diag = return_diagnostics
         capture_mask = return_mask
         cashflow, mask_out, diagnostics = _lsm_cashflows(paths, strike=self.X, call=call, rate=self.r, maturity=self.T,
@@ -258,16 +281,23 @@ class MonteCarloPricing:
             result.append(mask_out)
         return tuple(result)
 
-    def american_cashflows(self, paths: np.ndarray, *, call: bool = True, basis_fn: str = "laguerre",
+    def american_cashflows(self, paths: np.ndarray, *, call: bool = True, basis_fn: BasisName = "laguerre",
                             include_all_paths: bool = True, mask_tolerance: float = 0.0,
                             mask: Optional[np.ndarray] = None, return_mask: bool = False,
-                            return_diagnostics: bool = False):
+                            return_diagnostics: bool = False, nn_kwargs: Optional[dict] = None):
         """Direct access to discounted American cashflows for custom workflows."""
 
         if self.r is None:
             raise ValueError("Risk-free rate r must be set before running American LSM cashflows.")
 
-        config = LSMConfig(basis=basis_fn, include_all_paths=include_all_paths, mask_tolerance=mask_tolerance)
+        basis = basis_fn.lower() if isinstance(basis_fn, str) else basis_fn
+        config = LSMConfig(
+            basis=basis,
+            include_all_paths=include_all_paths,
+            mask_tolerance=mask_tolerance,
+            nn_kwargs=nn_kwargs,
+            seed=self._seed,
+        )
         capture_mask = return_mask
         capture_diag = return_diagnostics
         cashflow, mask_out, diagnostics = _lsm_cashflows(paths, strike=self.X, call=call, rate=self.r, maturity=self.T,
@@ -285,9 +315,10 @@ class MonteCarloPricing:
             return outputs[0]
         return tuple(outputs)
 
-    def plot_american_exercise(self, call: bool = True, basis_fn: str = "laguerre", *, antithetic: bool = True,
+    def plot_american_exercise(self, call: bool = True, basis_fn: BasisName = "laguerre", *, antithetic: bool = True,
                                max_paths: int | None = 500, show_boundary: bool = True,
-                               figsize: tuple[float, float] = (10, 6)):
+                               figsize: tuple[float, float] = (10, 6),
+                               nn_kwargs: Optional[dict] = None):
         """Plot simulated paths with optimal exercise decisions highlighted."""
         try:
             import matplotlib.pyplot as plt
@@ -295,7 +326,7 @@ class MonteCarloPricing:
             raise ImportError("plot_american_exercise requires matplotlib to be installed.") from exc
 
         price, stderr, diagnostics = self.american(call=call, basis_fn=basis_fn, antithetic=antithetic,
-                                                   return_diagnostics=True)
+                                                   return_diagnostics=True, nn_kwargs=nn_kwargs)
 
         paths = diagnostics["paths"]
         exercise_mask = diagnostics["exercise_mask"]
