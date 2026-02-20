@@ -53,10 +53,11 @@ This repository implements option pricing models, ranging from classical models 
 
 ### Stage Six
 - Implement Machine Learning Models:
-    - Logistic Regression
-    - Random Forest
-    - Support Vector Machine
-- Visualise predicted vs actual prices
+    - ✅ Logistic Regression
+    - ✅ Random Forest
+    - ✅ Support Vector Machine
+- ✅ Visualise predicted vs actual prices
+  - Notebook: `notebooks/lsm_ml_model_comparison.ipynb`
 
 ### Extension(s)
 - Extend to multi-dimensional Amerian options i.e. vector/tensor inputs rather than single-asset
