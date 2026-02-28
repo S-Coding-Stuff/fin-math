@@ -1,10 +1,10 @@
-from __future__ import annotations
-
+from dataclasses import dataclass
 from typing import Literal, Optional
 
 import numpy as np
 
 BasisName = Literal["laguerre", "monomial", "hermite", "nn"]
+PolicyBasisName = Literal["laguerre", "monomial", "hermite", "paper_poly4", "paper_poly6"]
 
 class LSMConfig:
     def __init__(self, *, basis: BasisName = "laguerre", include_all_paths: bool = True,
@@ -49,6 +49,172 @@ def lsm_basis(states: np.ndarray, *, strike: float, basis: BasisName) -> np.ndar
         raise ValueError(f"Unsupported basis '{basis}'.")
     normalized = (flattened / strike).astype(float, copy=False)
     return np.exp(-normalized[:, None] / 2.0) * np.polynomial.laguerre.lagvander(normalized, 3)
+
+
+def _policy_basis(states: np.ndarray, *, strike: float, basis_name: PolicyBasisName) -> np.ndarray:
+    basis = basis_name.lower()
+    x = np.ravel(np.asarray(states, dtype=float))
+    if x.size == 0:
+        return np.zeros((0, 1), dtype=float)
+    if basis in {"laguerre", "monomial", "hermite"}:
+        return lsm_basis(x, strike=strike, basis=basis)  # type: ignore[arg-type]
+    centered = x - strike
+    if basis == "paper_poly4":
+        return np.column_stack([np.ones_like(centered), centered, centered**2, centered**3, centered**4])
+    if basis == "paper_poly6":
+        return np.column_stack(
+            [np.ones_like(centered), centered, centered**2, centered**3, centered**4, centered**5, centered**6]
+        )
+    raise ValueError(
+        "Unsupported basis_name. Use one of: "
+        "'laguerre', 'monomial', 'hermite', 'paper_poly4', 'paper_poly6'."
+    )
+
+
+@dataclass
+class LSMContinuationPolicy:
+    """Reusable LSM continuation policy fitted from paths."""
+
+    call: bool
+    strike: float
+    rate: float
+    maturity: float
+    steps: int
+    basis_name: PolicyBasisName
+    coefficients: list[np.ndarray | None]
+    fallback_values: list[float]
+
+    @property
+    def dt(self) -> float:
+        return self.maturity / self.steps
+
+    @property
+    def discount_grid(self) -> np.ndarray:
+        return np.exp(-self.rate * self.dt * np.arange(self.steps + 1))
+
+    def continuation_value(self, t: int, states: np.ndarray) -> np.ndarray:
+        x = np.ravel(np.asarray(states, dtype=float))
+        if t >= self.steps:
+            return np.zeros_like(x)
+        coeffs = self.coefficients[t]
+        if coeffs is None:
+            return np.full(x.shape[0], self.fallback_values[t], dtype=float)
+        basis = _policy_basis(x, strike=self.strike, basis_name=self.basis_name)
+        return basis @ coeffs
+
+    def stopping_times(self, paths: np.ndarray) -> np.ndarray:
+        payoff = immediate_payoff(paths, strike=self.strike, call=self.call)
+        tau = np.full(paths.shape[1], self.steps, dtype=int)
+        alive = np.ones(paths.shape[1], dtype=bool)
+
+        for t in range(self.steps):
+            if not np.any(alive):
+                break
+            idx = np.where(alive)[0]
+            states = paths[t, idx]
+            exercise = payoff[t, idx]
+            continuation = self.continuation_value(t, states)
+            exercise_now = (exercise > 0.0) & (exercise > continuation)
+            chosen = idx[exercise_now]
+            tau[chosen] = t
+            alive[chosen] = False
+        return tau
+
+    def discounted_cashflows(self, paths: np.ndarray) -> np.ndarray:
+        payoff = immediate_payoff(paths, strike=self.strike, call=self.call)
+        tau = self.stopping_times(paths)
+        return self.discount_grid[tau] * payoff[tau, np.arange(paths.shape[1])]
+
+
+@dataclass
+class LSMPolicyFit:
+    policy: LSMContinuationPolicy
+    stage1_estimate: float
+    stage1_stderr: float
+    selected_count_by_step: np.ndarray
+    fit_mse_by_step: np.ndarray
+
+
+def fit_lsm_policy_from_paths(paths: np.ndarray, *, strike: float, rate: float, maturity: float,
+                              call: bool = False, basis_name: PolicyBasisName = "laguerre",
+                              include_all_paths: bool = False, mask_tolerance: float = 0.0) -> LSMPolicyFit:
+    """Fit LSM continuation regressions and return a reusable policy object."""
+    n_times, n_paths = paths.shape
+    steps = n_times - 1
+    if steps < 1:
+        raise ValueError("paths must contain at least one exercise step.")
+    if maturity <= 0.0:
+        raise ValueError("maturity must be positive.")
+
+    dt = maturity / steps
+    discount = float(np.exp(-rate * dt))
+    payoff = immediate_payoff(paths, strike=strike, call=call)
+    mask = build_mask(
+        paths,
+        strike=strike,
+        call=call,
+        include_all=include_all_paths,
+        tolerance=mask_tolerance,
+    )
+
+    cashflow = payoff[-1].copy()
+    coeffs_by_step: list[np.ndarray | None] = [None for _ in range(steps)]
+    fallback_by_step: list[float] = [0.0 for _ in range(steps)]
+    selected = np.zeros(steps, dtype=int)
+    fit_mse = np.full(steps, np.nan, dtype=float)
+
+    for t in range(steps - 1, -1, -1):
+        include = mask[t]
+        if np.any(include):
+            states = paths[t, include]
+            targets = cashflow[include] * discount
+            basis = _policy_basis(states, strike=strike, basis_name=basis_name)
+            coeffs, *_ = np.linalg.lstsq(basis, targets, rcond=None)
+            continuation = basis @ coeffs
+            intrinsic = payoff[t, include]
+            exercise_now = (intrinsic > 0.0) & (intrinsic > continuation)
+
+            idx = np.where(include)[0]
+            cashflow[idx] = np.where(exercise_now, intrinsic, cashflow[idx] * discount)
+            cashflow[~include] *= discount
+
+            coeffs_by_step[t] = coeffs
+            fallback_by_step[t] = float(np.mean(targets))
+            selected[t] = int(np.sum(include))
+            fit_mse[t] = float(np.mean((continuation - targets) ** 2))
+        else:
+            cashflow *= discount
+            coeffs_by_step[t] = None
+            fallback_by_step[t] = float(np.mean(cashflow))
+
+    ddof = 1 if n_paths > 1 else 0
+    policy = LSMContinuationPolicy(
+        call=call,
+        strike=strike,
+        rate=rate,
+        maturity=maturity,
+        steps=steps,
+        basis_name=basis_name,
+        coefficients=coeffs_by_step,
+        fallback_values=fallback_by_step,
+    )
+    return LSMPolicyFit(
+        policy=policy,
+        stage1_estimate=float(np.mean(cashflow)),
+        stage1_stderr=float(np.std(cashflow, ddof=ddof) / np.sqrt(n_paths)),
+        selected_count_by_step=selected,
+        fit_mse_by_step=fit_mse,
+    )
+
+
+def evaluate_lsm_policy(policy: LSMContinuationPolicy, paths: np.ndarray) -> tuple[float, float, np.ndarray]:
+    """Evaluate a fitted LSM policy on provided paths."""
+    cashflows = policy.discounted_cashflows(paths)
+    n_paths = cashflows.size
+    ddof = 1 if n_paths > 1 else 0
+    mean = float(np.mean(cashflows))
+    stderr = float(np.std(cashflows, ddof=ddof) / np.sqrt(n_paths))
+    return mean, stderr, cashflows
 
 
 def _lsm_cashflows(paths: np.ndarray, *, strike: float, call: bool, rate: float, maturity: float,
@@ -367,4 +533,16 @@ class MonteCarloPricing:
 
         return price, stderr
 
-__all__ = ['MonteCarloPricing']
+__all__ = [
+    "BasisName",
+    "PolicyBasisName",
+    "LSMConfig",
+    "LSMContinuationPolicy",
+    "LSMPolicyFit",
+    "immediate_payoff",
+    "build_mask",
+    "lsm_basis",
+    "fit_lsm_policy_from_paths",
+    "evaluate_lsm_policy",
+    "MonteCarloPricing",
+]

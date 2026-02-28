@@ -1,5 +1,4 @@
 """Regression helpers for LSM continuation value estimation."""
-from __future__ import annotations
 
 import numpy as np
 
