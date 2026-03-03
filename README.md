@@ -13,14 +13,6 @@ This repository implements option pricing models, ranging from classical models 
 - 🖼️ **Path Visualisation** and Payoff Plotting
 - 👨‍💻 **Data Gathering** for Stocks and their respective Options
 
-![American put optimal exercise boundary](assets/us_put_optimal_exercise.png)
-
-*Average optimal exercise level for an American put estimated via Longstaff–Schwartz Monte Carlo.*
-
-![QMC runtime efficiency](assets/qmc_results/figures/fig02_runtime_efficiency.png)
-
-*Runtime-efficiency frontier comparing MC and QMC methods.*
-
 ## 🛣️ Roadmap
 ### Stage One
 - ✅ Implement Black-Scholes model for European Call and Put Options
@@ -67,6 +59,15 @@ This repository implements option pricing models, ranging from classical models 
 - Extend to multi-dimensional Amerian options i.e. vector/tensor inputs rather than single-asset
 - Create more realistic setups - Dividends, Transaction Costs, Stochastic Interest Rates
 - Exotic Options - Bermudan Options, Shout/Chooser-lite, European Digital, Asian
+
+## Some Figures
+![American put optimal exercise boundary](assets/us_put_optimal_exercise.png)
+
+*Average optimal exercise level for an American put estimated via Longstaff–Schwartz Monte Carlo.*
+
+![QMC runtime efficiency](assets/qmc_results/figures/fig02_runtime_efficiency.png)
+
+*Runtime-efficiency frontier comparing MC and QMC methods.*
 
 ## References
 
