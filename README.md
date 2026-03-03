@@ -17,6 +17,10 @@ This repository implements option pricing models, ranging from classical models 
 
 *Average optimal exercise level for an American put estimated via Longstaff–Schwartz Monte Carlo.*
 
+![QMC runtime efficiency](assets/qmc_results/figures/fig02_runtime_efficiency.png)
+
+*Runtime-efficiency frontier comparing MC and QMC methods.*
+
 ## 🛣️ Roadmap
 ### Stage One
 - ✅ Implement Black-Scholes model for European Call and Put Options
