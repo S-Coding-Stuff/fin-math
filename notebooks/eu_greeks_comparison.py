@@ -3,9 +3,6 @@
 Run as a standalone script to print a small table and optionally render a bar
 chart comparing the two approaches for a European option under shared inputs.
 """
-
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 from typing import Dict

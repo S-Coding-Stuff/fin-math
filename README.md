@@ -28,7 +28,7 @@ This repository implements option pricing models, ranging from classical models 
 -  Compare model prices vs market quotes
 
 ### Stage Three
-- Add Feature Engineering (log-moneyness, normalised T, volatility surface features) and their Visualisations
+- ✅ Add Feature Engineering (log-moneyness, normalised T, volatility surface features) and their Visualisations
 - ✅ Implement Longstaff-Schwartz Monte Carlo for pricing American Options
 - ✅ Implement Antithetic Variates
 - ✅ Provide different bases - Monomial, Laguerre, Hermite, Legendre polynomials
@@ -37,15 +37,15 @@ This repository implements option pricing models, ranging from classical models 
 - Implement Quasi-Monte Carlo - Research for understanding:
   - ✅ Bounds of a high-dimensional hypercube
   - ✅ Koksma-Hlawka Inequality
-  - Lattice Rules
   - ✅ Faure, Halton, Sobol Sequences
+  - Randomised QMC
 
 ### Stage Five
 - Develop methods for finding sensitivities:
   - ✅ Finite Difference Black-Scholes for understanding
   - ✅ Finite Difference Method for Monte Carlo
   - ✅ Pathwise Derivative Estimates
-  - (Extra) Likelihood Ratio Method
+  - (Extra) Likelihood Ratio Method ~ Theoretical learning, not implemented
 
 ### Stage Six
 - Implement Machine Learning Models:
@@ -57,7 +57,7 @@ This repository implements option pricing models, ranging from classical models 
 
 ### Extension(s)
 - Extend to multi-dimensional Amerian options i.e. vector/tensor inputs rather than single-asset
-- Create more realistic setups - Dividends, Transaction Costs, Stochastic Interest Rates
+- Create more realistic setups - Dividends, Transaction Costs, Stochastic Interest Rates (Heston Model)
 - Exotic Options - Bermudan Options, Shout/Chooser-lite, European Digital, Asian
 
 ## Some Figures
