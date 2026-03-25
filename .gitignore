@@ -40,3 +40,17 @@ env/
 *.secret
 *.secrets
 
+engines/_monte_carlo.py
+american_lsm_animation.py
+quasi_monte_carlo.py
+results/
+notebooks/results/
+Dissertation-18.pdf
+assets/
+experimental/
+OptStopRandNN/
+run_american_delta_gamma_experiments.py
+tests/
+plots/
+OptStopRandNN/
+notebooks/

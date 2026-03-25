@@ -159,14 +159,29 @@ class QuasiMonteCarloPricing(MonteCarloPricing):
         self._seed = seed
         self._brownian_bridge = brownian_bridge
 
+    def _draw_normals(self, count: int) -> np.ndarray:
+        """Return deterministic QMC normals for reuse in CRN-based Greek estimators."""
+        normals = generate_qmc_normals(
+            method=self._method,
+            num_paths=int(count),
+            steps=self.steps,
+            scramble=self._scramble,
+            seed=self._seed,
+            antithetic=False,
+        )
+        if self._brownian_bridge:
+            normals = _apply_brownian_bridge(normals, maturity=self.T)
+        return normals
+
     def _simulate_paths(self, risk_neutral: bool = True, Z: np.ndarray | None = None, *,
                         antithetic: bool = False) -> np.ndarray:
         if Z is None:
-            Z = generate_qmc_normals(method=self._method, num_paths=self.num_paths,
-                                     steps=self.steps, scramble=self._scramble,
-                                     seed=self._seed, antithetic=antithetic)
-            if self._brownian_bridge:
-                Z = _apply_brownian_bridge(Z, maturity=self.T)
+            if antithetic:
+                count = (self.num_paths + 1) // 2
+                base = self._draw_normals(count)
+                Z = np.concatenate((base, -base), axis=1)[:, :self.num_paths]
+            else:
+                Z = self._draw_normals(self.num_paths)
         return super()._simulate_paths(risk_neutral=risk_neutral, Z=Z, antithetic=False)
 
 

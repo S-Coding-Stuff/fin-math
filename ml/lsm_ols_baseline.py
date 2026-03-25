@@ -1,8 +1,3 @@
-"""OLS baseline wrapper for the existing LSM American option pricer.
-
-This module keeps things simple and relies on the MonteCarloPricing.american()
-implementation, using a monomial basis as a basic OLS regression baseline.
-"""
 from dataclasses import dataclass
 from typing import Callable
 import pathlib, sys

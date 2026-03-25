@@ -1,22 +1,30 @@
 from dataclasses import dataclass
-from typing import Callable, Literal, Optional
+from typing import Any, Callable, Literal, Optional
 
 import numpy as np
+from engines.rlsm import (
+    RLSMPolicy,
+    evaluate_rlsm_policy,
+    fit_rlsm_policy_from_paths,
+)
 
-BasisName = Literal["laguerre", "monomial", "hermite", "nn"]
-PolicyBasisName = Literal["laguerre", "monomial", "hermite", "paper_poly4", "paper_poly6"]
+BasisName = Literal["laguerre", "monomial", "hermite", "paper_poly2", "nn", "rlsm"]
+PolicyBasisName = Literal["laguerre", "monomial", "hermite", "paper_poly2", "paper_poly4", "paper_poly6"]
 PayoffFn = Callable[[np.ndarray], np.ndarray]
 StateFn = Callable[[np.ndarray], np.ndarray]
 
 class LSMConfig:
     def __init__(self, *, basis: BasisName = "laguerre", include_all_paths: bool = True,
                  mask_tolerance: float = 0.0, nn_kwargs: Optional[dict] = None,
-                 seed: int | None = None) -> None:
+                 seed: int | None = None, rlsm_kwargs: Optional[dict] = None,
+                 train_eval_split: float | None = None) -> None:
         self.basis = basis
         self.include_all_paths = bool(include_all_paths)
         self.mask_tolerance = float(mask_tolerance)
         self.nn_kwargs = {} if nn_kwargs is None else dict(nn_kwargs)
+        self.rlsm_kwargs = {} if rlsm_kwargs is None else dict(rlsm_kwargs)
         self.seed = seed
+        self.train_eval_split = train_eval_split
 
 
 def _coerce_asset_vector(value: float | np.ndarray, *, n_assets: int, name: str) -> np.ndarray:
@@ -97,8 +105,16 @@ def build_mask(paths: np.ndarray, *, strike: float, call: bool, include_all: boo
 def lsm_basis(states: np.ndarray, *, strike: float, basis: BasisName) -> np.ndarray:
     raw = np.asarray(states, dtype=float)
     if raw.ndim == 2 and raw.shape[1] > 1:
-        if basis == "nn":
-            raise ValueError("Neural network basis must be handled via the NN regressor.")
+        if basis in {"nn", "rlsm"}:
+            raise ValueError("Neural-network bases must be handled by dedicated regressors.")
+        if basis == "paper_poly2":
+            cols: list[np.ndarray] = [np.ones(raw.shape[0], dtype=float)]
+            cols.extend([raw[:, j] for j in range(raw.shape[1])])
+            cols.extend([raw[:, j] ** 2 for j in range(raw.shape[1])])
+            for i in range(raw.shape[1]):
+                for j in range(i + 1, raw.shape[1]):
+                    cols.append(raw[:, i] * raw[:, j])
+            return np.column_stack(cols)
         if basis == "monomial":
             cols: list[np.ndarray] = [np.ones(raw.shape[0], dtype=float)]
             cols.extend([raw[:, j] for j in range(raw.shape[1])])
@@ -123,8 +139,10 @@ def lsm_basis(states: np.ndarray, *, strike: float, basis: BasisName) -> np.ndar
     flattened = np.ravel(raw)
     if flattened.size == 0:
         return np.zeros((0, 3))
-    if basis == "nn":
-        raise ValueError("Neural network basis must be handled via the NN regressor.")
+    if basis in {"nn", "rlsm"}:
+        raise ValueError("Neural-network bases must be handled by dedicated regressors.")
+    if basis == "paper_poly2":
+        return np.column_stack((np.ones_like(flattened), flattened, flattened**2))
     if basis == "monomial":
         return np.vander(flattened, N=3, increasing=True)
     if basis == "hermite":
@@ -153,7 +171,7 @@ def _policy_basis(states: np.ndarray, *, strike: float, basis_name: PolicyBasisN
 
     if x.size == 0:
         return np.zeros((0, 1), dtype=float)
-    if basis in {"laguerre", "monomial", "hermite"}:
+    if basis in {"laguerre", "monomial", "hermite", "paper_poly2"}:
         return lsm_basis(base_states, strike=strike, basis=basis)  # type: ignore[arg-type]
     centered = x - strike
     if basis == "paper_poly4":
@@ -164,8 +182,24 @@ def _policy_basis(states: np.ndarray, *, strike: float, basis_name: PolicyBasisN
         )
     raise ValueError(
         "Unsupported basis_name. Use one of: "
-        "'laguerre', 'monomial', 'hermite', 'paper_poly4', 'paper_poly6'."
+        "'laguerre', 'monomial', 'hermite', 'paper_poly2', 'paper_poly4', 'paper_poly6'."
     )
+
+
+def _eval_slice(cashflows: np.ndarray, split: float | None) -> np.ndarray:
+    arr = np.asarray(cashflows, dtype=float).reshape(-1)
+    if split is None:
+        return arr
+    if arr.size < 2:
+        raise ValueError("train_eval_split requires at least 2 paths.")
+    split_f = float(split)
+    if not (0.0 < split_f < 1.0):
+        raise ValueError("train_eval_split must be strictly between 0 and 1.")
+    train_count = max(1, min(int(arr.size * split_f), arr.size - 1))
+    sample = arr[train_count:]
+    if sample.size == 0:
+        raise ValueError("train_eval_split leaves no evaluation paths.")
+    return sample
 
 
 @dataclass
@@ -367,6 +401,33 @@ def _lsm_cashflows(paths: np.ndarray, *, strike: float, call: bool, rate: float,
         raise ValueError("Need at least one time step for American valuation.")
     if maturity <= 0.0:
         raise ValueError("Maturity must be positive for American valuation.")
+
+    if config.basis == "rlsm":
+        if mask is not None:
+            raise ValueError("RLSM does not use continuation masks; pass freeze policy in the Greek estimator.")
+        rlsm_fit = fit_rlsm_policy_from_paths(
+            paths,
+            strike=strike,
+            rate=rate,
+            maturity=maturity,
+            call=call,
+            payoff_fn=payoff_fn,
+            state_fn=state_fn,
+            **config.rlsm_kwargs,
+        )
+        diag: Optional[dict[str, np.ndarray]] = None
+        if capture_diagnostics:
+            diag = rlsm_fit.policy.diagnostics(paths)
+            diag.update(
+                {
+                    "train_count_by_step": rlsm_fit.train_count_by_step.astype(float),
+                    "fit_mse_by_step": rlsm_fit.fit_mse_by_step.astype(float),
+                    "stage1_estimate": np.array([rlsm_fit.stage1_estimate], dtype=float),
+                    "stage1_stderr": np.array([rlsm_fit.stage1_stderr], dtype=float),
+                }
+            )
+        mask_return = np.ones((n_steps - 1, n_paths), dtype=bool) if capture_mask else None
+        return rlsm_fit.cashflows, mask_return, diag
 
     dt = maturity / (n_steps - 1)
     discount = np.exp(-rate * dt)
@@ -628,7 +689,8 @@ class MonteCarloPricing:
                  continuation_mask: Optional[np.ndarray] = None, paths: Optional[np.ndarray] = None,
                  return_diagnostics: bool = False, return_mask: bool = False,
                  nn_kwargs: Optional[dict] = None, payoff_fn: PayoffFn | None = None,
-                 state_fn: StateFn | None = None) -> tuple:
+                 state_fn: StateFn | None = None, rlsm_kwargs: Optional[dict] = None,
+                 train_eval_split: float | None = None) -> tuple:
         """Price an American option using the Least Squares Monte Carlo method.
 
         Parameters beyond the classic signature provide hooks for advanced workflows:
@@ -653,7 +715,9 @@ class MonteCarloPricing:
             include_all_paths=include_all_paths,
             mask_tolerance=mask_tolerance,
             nn_kwargs=nn_kwargs,
+            rlsm_kwargs=rlsm_kwargs,
             seed=self._seed,
+            train_eval_split=train_eval_split,
         )
         capture_diag = return_diagnostics
         capture_mask = return_mask
@@ -661,10 +725,15 @@ class MonteCarloPricing:
                                                          config=config, mask=continuation_mask, capture_mask=capture_mask,
                                                          capture_diagnostics=capture_diag, payoff_fn=payoff_fn,
                                                          state_fn=state_fn)
-
-        price = float(np.mean(cashflow))
-        ddof = 1 if n_paths > 1 else 0
-        stderr = float(np.std(cashflow, ddof=ddof) / np.sqrt(n_paths))
+        if train_eval_split is not None:
+            sample = _eval_slice(cashflow, train_eval_split)
+        elif basis == "rlsm":
+            sample = _eval_slice(cashflow, float((rlsm_kwargs or {}).get("train_eval_split", 0.5)))
+        else:
+            sample = np.asarray(cashflow, dtype=float)
+        ddof = 1 if sample.size > 1 else 0
+        price = float(np.mean(sample))
+        stderr = float(np.std(sample, ddof=ddof) / np.sqrt(sample.size))
         result: list = [price, stderr]
         if return_diagnostics:
             result.append(diagnostics if diagnostics is not None else {})
@@ -686,7 +755,9 @@ class MonteCarloPricing:
                             include_all_paths: bool = True, mask_tolerance: float = 0.0,
                             mask: Optional[np.ndarray] = None, return_mask: bool = False,
                             return_diagnostics: bool = False, nn_kwargs: Optional[dict] = None,
-                            payoff_fn: PayoffFn | None = None, state_fn: StateFn | None = None):
+                            payoff_fn: PayoffFn | None = None, state_fn: StateFn | None = None,
+                            rlsm_kwargs: Optional[dict] = None,
+                            train_eval_split: float | None = None):
         """Direct access to discounted American cashflows for custom workflows."""
 
         r_scalar = self._risk_free_scalar()
@@ -697,7 +768,9 @@ class MonteCarloPricing:
             include_all_paths=include_all_paths,
             mask_tolerance=mask_tolerance,
             nn_kwargs=nn_kwargs,
+            rlsm_kwargs=rlsm_kwargs,
             seed=self._seed,
+            train_eval_split=train_eval_split,
         )
         capture_mask = return_mask
         capture_diag = return_diagnostics
@@ -723,6 +796,74 @@ class MonteCarloPricing:
         if len(outputs) == 1:
             return outputs[0]
         return tuple(outputs)
+
+    def fit_american_policy(
+        self,
+        *,
+        call: bool = True,
+        basis_fn: BasisName = "laguerre",
+        include_all_paths: bool = True,
+        mask_tolerance: float = 0.0,
+        paths: Optional[np.ndarray] = None,
+        antithetic: bool = False,
+        rlsm_kwargs: Optional[dict] = None,
+        train_eval_split: float | None = None,
+    ) -> Any:
+        """Fit and return a reusable continuation policy."""
+        r_scalar = self._risk_free_scalar()
+        if paths is None:
+            paths = self._simulate_paths(antithetic=antithetic)
+
+        basis = basis_fn.lower() if isinstance(basis_fn, str) else basis_fn
+        if basis in {"laguerre", "monomial", "hermite", "paper_poly2"}:
+            fit_paths = paths
+            if train_eval_split is not None:
+                split_f = float(train_eval_split)
+                if not (0.0 < split_f < 1.0):
+                    raise ValueError("train_eval_split must be strictly between 0 and 1.")
+                n_paths = paths.shape[1]
+                if n_paths < 2:
+                    raise ValueError("train_eval_split requires at least 2 paths.")
+                train_count = max(1, min(int(n_paths * split_f), n_paths - 1))
+                fit_paths = paths[:, :train_count, ...]
+            fit = fit_lsm_policy_from_paths(
+                fit_paths,
+                strike=self.X,
+                rate=r_scalar,
+                maturity=self.T,
+                call=call,
+                basis_name=basis,  # type: ignore[arg-type]
+                include_all_paths=include_all_paths,
+                mask_tolerance=mask_tolerance,
+            )
+            return fit.policy
+        if basis == "rlsm":
+            kwargs = {} if rlsm_kwargs is None else dict(rlsm_kwargs)
+            if train_eval_split is not None:
+                kwargs["train_eval_split"] = float(train_eval_split)
+            fit = fit_rlsm_policy_from_paths(
+                paths,
+                strike=self.X,
+                rate=r_scalar,
+                maturity=self.T,
+                call=call,
+                **kwargs,
+            )
+            return fit.policy
+        raise ValueError(
+            "fit_american_policy supports basis_fn in "
+            "{'laguerre','monomial','hermite','paper_poly2','rlsm'}."
+        )
+
+    def evaluate_american_policy(self, policy: Any, paths: np.ndarray) -> np.ndarray:
+        """Evaluate discounted cashflows for a pre-fitted policy."""
+        if isinstance(policy, LSMContinuationPolicy):
+            _, _, cashflows = evaluate_lsm_policy(policy, paths)
+            return cashflows
+        if isinstance(policy, RLSMPolicy):
+            _, _, cashflows = evaluate_rlsm_policy(policy, paths)
+            return cashflows
+        raise TypeError("Unsupported policy type for evaluate_american_policy().")
 
     def plot_american_exercise(self, call: bool = True, basis_fn: BasisName = "laguerre", *, antithetic: bool = True,
                                max_paths: int | None = 500, show_boundary: bool = True,

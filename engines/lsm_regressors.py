@@ -37,8 +37,15 @@ def estimate_continuation_nn(
     if seed is not None:
         torch.manual_seed(seed)
 
-    features = np.asarray(states, dtype=np.float32).reshape(-1, 1)
+    features = np.asarray(states, dtype=np.float32)
+    if features.ndim == 1:
+        features = features.reshape(-1, 1)
+    elif features.ndim != 2:
+        raise ValueError("states must be a 1D or 2D array.")
     targets = np.asarray(targets, dtype=np.float32).reshape(-1, 1)
+
+    if features.shape[0] != targets.shape[0]:
+        raise ValueError("states and targets must have the same number of samples.")
 
     if features.shape[0] < min_samples:
         return np.full_like(targets.squeeze(-1), float(np.mean(targets)))
@@ -54,7 +61,7 @@ def estimate_continuation_nn(
     y_t = torch.from_numpy(targets)
 
     layers: list[nn.Module] = []
-    in_dim = 1
+    in_dim = x.shape[1]
     for size in hidden_sizes:
         layers.append(nn.Linear(in_dim, size))
         layers.append(nn.ReLU())

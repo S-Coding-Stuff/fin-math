@@ -1,12 +1,6 @@
 """Finite-difference Greeks using the binomial pricing model."""
-
-from __future__ import annotations
-
 from dataclasses import dataclass
-
 from models.binomial_method import BinomialPricing
-
-
 @dataclass
 class BinomialBumps:
     """Absolute bump sizes for finite-difference estimates."""
@@ -31,18 +25,29 @@ class BinomialFiniteDifference:
         self.steps = int(steps)
         self.call = bool(call)
         self.bumps = bumps if bumps is not None else BinomialBumps()
+        self._price_cache: dict[tuple[float, float, float, float], float] = {}
 
     def _price(self, *, S_0: float | None = None, r: float | None = None, sigma: float | None = None,
                T: float | None = None) -> float:
+        s0_eff = float(S_0 if S_0 is not None else self.S_0)
+        r_eff = float(r if r is not None else self.r)
+        sigma_eff = float(sigma if sigma is not None else self.sigma)
+        t_eff = float(T if T is not None else self.T)
+        key = (s0_eff, r_eff, sigma_eff, t_eff)
+        cached = self._price_cache.get(key)
+        if cached is not None:
+            return cached
         pricer = BinomialPricing(
-            S_0=S_0 if S_0 is not None else self.S_0,
+            S_0=s0_eff,
             K=self.K,
-            r=r if r is not None else self.r,
-            sigma=sigma if sigma is not None else self.sigma,
-            T=T if T is not None else self.T,
+            r=r_eff,
+            sigma=sigma_eff,
+            T=t_eff,
             steps=self.steps,
         )
-        return float(pricer.american(call=self.call))
+        value = float(pricer.american(call=self.call))
+        self._price_cache[key] = value
+        return value
 
     def price(self) -> float:
         return self._price()

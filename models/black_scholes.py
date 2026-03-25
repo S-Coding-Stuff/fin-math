@@ -70,16 +70,6 @@ class Volatility:
 
     @staticmethod
     def implied_volatility(market_price, S_0, X, r, T, call=True):
-        """
-        Implied Volatility calculation using the Black-Scholes model
-        :param market_price: observed option price
-        :param S_0: spot price
-        :param X: strike price
-        :param r: risk-free interest rate
-        :param T: time to maturity (years)
-        :param call: True for call, False for put
-        """
-
         def d1(sigma):
             return (np.log(S_0 / X) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
 
