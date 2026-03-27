@@ -90,7 +90,8 @@ def apply_path_construction(normals: np.ndarray, *, construction: str = "seq",
 
 
 def generate_qmc_normals(*, method: str, num_paths: int, steps: int, scramble: bool = False,
-                         seed: int | None = None, antithetic: bool = False) -> np.ndarray:
+                         seed: int | None = None, antithetic: bool = False,
+                         skip: int = 0) -> np.ndarray:
     """Generate (steps, num_paths) normal draws via QMC methods.
 
     Supported methods: "vdc", "sobol", "scrambled_sobol".
@@ -102,6 +103,7 @@ def generate_qmc_normals(*, method: str, num_paths: int, steps: int, scramble: b
         raise ValueError("num_paths must be >= 1.")
 
     count = (num_paths + 1) // 2 if antithetic else num_paths
+    skip = max(0, int(skip))
 
     if method == "vdc":
         start = 0 if seed is None else int(seed) * max(steps * count, 1)
@@ -115,8 +117,16 @@ def generate_qmc_normals(*, method: str, num_paths: int, steps: int, scramble: b
         use_scramble = bool(scramble or method == "scrambled_sobol")
         engine = Sobol(d=steps, scramble=use_scramble, seed=seed)
         # Sobol balance properties are strongest at powers of two; draw and trim.
-        m = int(math.ceil(math.log2(max(1, count))))
-        uniforms = engine.random_base2(m=m)[:count].T
+        if skip > 0:
+            fast_forward = getattr(engine, "fast_forward", None)
+            if callable(fast_forward):
+                fast_forward(skip)
+            else:
+                engine.random(skip)
+            uniforms = engine.random(count).T
+        else:
+            m = int(math.ceil(math.log2(max(1, count))))
+            uniforms = engine.random_base2(m=m)[:count].T
     else:
         raise ValueError("method must be one of: 'vdc', 'sobol', 'scrambled_sobol'.")
 
@@ -129,12 +139,12 @@ def generate_qmc_normals(*, method: str, num_paths: int, steps: int, scramble: b
 def generate_qmc_paths(*, pricer: MonteCarloPricing, method: str = "sobol",
                        scramble: bool = False, seed: int | None = None,
                        brownian_bridge: bool = False, construction: str | None = None,
-                       antithetic: bool = False,
+                       antithetic: bool = False, skip: int = 0,
                        risk_neutral: bool = True) -> np.ndarray:
     """Generate GBM paths using QMC normals for an existing pricer."""
     normals = generate_qmc_normals(method=method, num_paths=pricer.num_paths,
                                    steps=pricer.steps, scramble=scramble,
-                                   seed=seed, antithetic=antithetic)
+                                   seed=seed, antithetic=antithetic, skip=skip)
     if construction is not None:
         normals = apply_path_construction(normals, construction=construction, maturity=pricer.T)
     elif brownian_bridge:
@@ -149,7 +159,8 @@ class QuasiMonteCarloPricing(MonteCarloPricing):
                  r: float | None = None, mu: float | None = None,
                  num_paths: int = 1024, steps: int = 252,
                  method: str = "sobol", scramble: bool = False,
-                 seed: int | None = None, brownian_bridge: bool = False) -> None:
+                 seed: int | None = None, brownian_bridge: bool = False,
+                 skip: int = 0) -> None:
 
         super().__init__(S_0=S_0, X=X, sigma=sigma, T=T, r=r, mu=mu,
                          num_paths=num_paths, steps=steps,
@@ -158,6 +169,7 @@ class QuasiMonteCarloPricing(MonteCarloPricing):
         self._scramble = scramble
         self._seed = seed
         self._brownian_bridge = brownian_bridge
+        self._skip = max(0, int(skip))
 
     def _draw_normals(self, count: int) -> np.ndarray:
         """Return deterministic QMC normals for reuse in CRN-based Greek estimators."""
@@ -168,6 +180,7 @@ class QuasiMonteCarloPricing(MonteCarloPricing):
             scramble=self._scramble,
             seed=self._seed,
             antithetic=False,
+            skip=self._skip,
         )
         if self._brownian_bridge:
             normals = _apply_brownian_bridge(normals, maturity=self.T)
