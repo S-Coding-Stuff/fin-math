@@ -9,7 +9,18 @@ from typing import Callable, Literal
 
 import numpy as np
 
-ActivationName = Literal["tanh", "relu", "leaky_relu", "sigmoid", "softplus", "identity", "linear"]
+ActivationName = Literal[
+    "tanh",
+    "relu",
+    "leaky_relu",
+    "sigmoid",
+    "softplus",
+    "identity",
+    "linear",
+    "gelu",
+    "silu",
+    "elu",
+]
 WeightDistName = Literal["normal", "gaussian"]
 PayoffFn = Callable[[np.ndarray], np.ndarray]
 StateFn = Callable[[np.ndarray], np.ndarray]
@@ -59,6 +70,8 @@ def _state_features(
     states: np.ndarray,
     *,
     state_fn: StateFn | None,
+    payoff_values: np.ndarray | None = None,
+    use_payoff_as_input: bool = False,
     expected_dim: int | None = None,
 ) -> np.ndarray:
     raw = np.asarray(states, dtype=float)
@@ -86,6 +99,14 @@ def _state_features(
     else:
         raise ValueError("state_fn output must be 1D or 2D.")
 
+    if use_payoff_as_input:
+        if payoff_values is None:
+            raise ValueError("payoff_values must be provided when use_payoff_as_input=True.")
+        payoff_arr = np.asarray(payoff_values, dtype=float).reshape(-1, 1)
+        if payoff_arr.shape[0] != feats.shape[0]:
+            raise ValueError("payoff_values must align with path count.")
+        feats = np.concatenate((feats, payoff_arr), axis=1)
+
     if expected_dim is not None and feats.shape[1] != expected_dim:
         raise ValueError(
             f"State feature dimension mismatch: expected {expected_dim}, received {feats.shape[1]}."
@@ -93,17 +114,25 @@ def _state_features(
     return feats
 
 
-def _activation(x: np.ndarray, name: ActivationName) -> np.ndarray:
+def _activation(x: np.ndarray, name: ActivationName, *, parameter: float = 1.0) -> np.ndarray:
     if name == "tanh":
         return np.tanh(x)
     if name == "relu":
         return np.maximum(x, 0.0)
     if name == "leaky_relu":
-        return np.where(x >= 0.0, x, 0.01 * x)
+        return np.where(x >= 0.0, x, float(parameter) * x)
     if name == "sigmoid":
         return 1.0 / (1.0 + np.exp(-x))
     if name == "softplus":
-        return np.log1p(np.exp(-np.abs(x))) + np.maximum(x, 0.0)
+        beta = max(float(parameter), 1e-12)
+        return np.log1p(np.exp(-np.abs(beta * x))) / beta + np.maximum(x, 0.0)
+    if name == "gelu":
+        return 0.5 * x * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x + 0.044715 * (x ** 3))))
+    if name == "silu":
+        return x / (1.0 + np.exp(-x))
+    if name == "elu":
+        alpha = float(parameter)
+        return np.where(x > 0.0, x, alpha * (np.exp(x) - 1.0))
     if name in {"identity", "linear"}:
         return x
     raise ValueError(f"Unsupported activation '{name}'.")
@@ -124,9 +153,17 @@ def _sample_hidden_weights(
     return A.astype(float, copy=False), b.astype(float, copy=False)
 
 
-def _feature_matrix(states: np.ndarray, *, A: np.ndarray, b: np.ndarray, activation: ActivationName) -> np.ndarray:
-    x = np.asarray(states, dtype=float).reshape(-1, A.shape[1])
-    hidden = _activation(x @ A.T + b[None, :], activation)
+def _feature_matrix(
+    states: np.ndarray,
+    *,
+    A: np.ndarray,
+    b: np.ndarray,
+    activation: ActivationName,
+    activation_parameter: float = 1.0,
+    input_scale: float = 1.0,
+) -> np.ndarray:
+    x = np.asarray(states, dtype=float).reshape(-1, A.shape[1]) * float(input_scale)
+    hidden = _activation(x @ A.T + b[None, :], activation, parameter=activation_parameter)
     ones = np.ones((hidden.shape[0], 1), dtype=float)
     return np.concatenate((hidden, ones), axis=1)
 
@@ -168,6 +205,9 @@ class RLSMPolicy:
     weights_by_step: list[tuple[np.ndarray, np.ndarray]]
     theta_by_step: list[np.ndarray]
     fallback_by_step: list[float]
+    activation_parameter: float = 1.0
+    input_scale: float = 1.0
+    use_payoff_as_input: bool = False
     payoff_fn: PayoffFn | None = None
     state_fn: StateFn | None = None
 
@@ -188,11 +228,24 @@ class RLSMPolicy:
         theta = self.theta_by_step[t]
         if theta.size == 0:
             return np.full(features.shape[0], self.fallback_by_step[t], dtype=float)
-        phi = _feature_matrix(features, A=A, b=b, activation=self.activation)
+        phi = _feature_matrix(
+            features,
+            A=A,
+            b=b,
+            activation=self.activation,
+            activation_parameter=self.activation_parameter,
+            input_scale=self.input_scale,
+        )
         return phi @ theta
 
-    def continuation_value(self, t: int, states: np.ndarray) -> np.ndarray:
-        features = _state_features(states, state_fn=self.state_fn, expected_dim=self.input_dim)
+    def continuation_value(self, t: int, states: np.ndarray, payoff_values: np.ndarray | None = None) -> np.ndarray:
+        features = _state_features(
+            states,
+            state_fn=self.state_fn,
+            payoff_values=payoff_values,
+            use_payoff_as_input=self.use_payoff_as_input,
+            expected_dim=self.input_dim,
+        )
         return self._continuation_from_features(t, features)
 
     def stopping_times(self, paths: np.ndarray) -> np.ndarray:
@@ -206,7 +259,13 @@ class RLSMPolicy:
                 break
             idx = np.where(alive)[0]
             exercise = payoff[t, idx]
-            features = _state_features(cube[t, idx, :], state_fn=self.state_fn, expected_dim=self.input_dim)
+            features = _state_features(
+                cube[t, idx, :],
+                state_fn=self.state_fn,
+                payoff_values=exercise,
+                use_payoff_as_input=self.use_payoff_as_input,
+                expected_dim=self.input_dim,
+            )
             continuation = self._continuation_from_features(t, features)
             exercise_now = (exercise > 0.0) & (exercise >= continuation)
             chosen = idx[exercise_now]
@@ -230,7 +289,7 @@ class RLSMPolicy:
         exercise_mask[tau[valid], np.where(valid)[0]] = True
         continuation = np.full((n_times - 1, n_paths), np.nan, dtype=float)
         for t in range(n_times - 1):
-            continuation[t] = self.continuation_value(t, cube[t])
+            continuation[t] = self.continuation_value(t, cube[t], payoff_values=payoff[t])
         paths_out = cube[:, :, 0] if n_assets == 1 else cube
         return {
             "paths": paths_out,
@@ -271,6 +330,9 @@ def fit_rlsm_policy_from_paths(
     train_eval_split: float = 0.5,
     payoff_fn: PayoffFn | None = None,
     state_fn: StateFn | None = None,
+    use_payoff_as_input: bool = False,
+    factors: tuple[float, ...] = (1.0,),
+    optstop_compatible: bool = False,
 ) -> RLSMFit:
     cube = _as_path_cube(paths)
     n_times, n_paths, _ = cube.shape
@@ -278,6 +340,9 @@ def fit_rlsm_policy_from_paths(
         raise ValueError("paths must include at least one exercise step.")
     if maturity <= 0.0:
         raise ValueError("maturity must be positive.")
+    n_assets = cube.shape[2]
+    if optstop_compatible and hidden_size < 0:
+        hidden_size = 50 + abs(int(hidden_size)) * n_assets
     if hidden_size < 1:
         raise ValueError("hidden_size must be >= 1.")
     if not (0.0 < train_eval_split < 1.0):
@@ -286,6 +351,16 @@ def fit_rlsm_policy_from_paths(
         raise ValueError("weight_scale must be positive.")
     if ridge_lambda < 0.0:
         raise ValueError("ridge_lambda must be >= 0.")
+    if len(factors) < 1:
+        raise ValueError("factors must contain at least one value.")
+
+    input_scale = float(factors[0])
+    activation_parameter = 1.0
+    if optstop_compatible:
+        if activation == "leaky_relu":
+            activation_parameter = input_scale / 2.0
+        elif activation in {"softplus", "elu"} and len(factors) > 1:
+            activation_parameter = float(factors[1])
 
     n_steps = n_times - 1
     dt = maturity / n_steps
@@ -299,7 +374,12 @@ def fit_rlsm_policy_from_paths(
     if eval_indices.size == 0:
         raise ValueError("train_eval_split leaves no evaluation paths.")
 
-    first_features = _state_features(cube[0, train_indices, :], state_fn=state_fn)
+    first_features = _state_features(
+        cube[0, train_indices, :],
+        state_fn=state_fn,
+        payoff_values=payoff[0, train_indices],
+        use_payoff_as_input=use_payoff_as_input,
+    )
     input_dim = int(first_features.shape[1])
 
     rng = np.random.default_rng(seed)
@@ -335,9 +415,18 @@ def fit_rlsm_policy_from_paths(
         train_features = _state_features(
             cube[t, train_indices, :],
             state_fn=state_fn,
+            payoff_values=payoff[t, train_indices],
+            use_payoff_as_input=use_payoff_as_input,
             expected_dim=input_dim,
         )
-        phi_train = _feature_matrix(train_features, A=A, b=b, activation=activation)
+        phi_train = _feature_matrix(
+            train_features,
+            A=A,
+            b=b,
+            activation=activation,
+            activation_parameter=activation_parameter,
+            input_scale=input_scale,
+        )
         target_train = cashflow[train_indices] * discount
         theta = _solve_last_layer(phi_train, target_train, ridge_lambda=ridge_lambda)
         pred_train = phi_train @ theta
@@ -345,8 +434,21 @@ def fit_rlsm_policy_from_paths(
         fallback_by_step[t] = float(np.mean(target_train))
         theta_by_step[t] = theta
 
-        all_features = _state_features(cube[t], state_fn=state_fn, expected_dim=input_dim)
-        phi_all = _feature_matrix(all_features, A=A, b=b, activation=activation)
+        all_features = _state_features(
+            cube[t],
+            state_fn=state_fn,
+            payoff_values=payoff[t],
+            use_payoff_as_input=use_payoff_as_input,
+            expected_dim=input_dim,
+        )
+        phi_all = _feature_matrix(
+            all_features,
+            A=A,
+            b=b,
+            activation=activation,
+            activation_parameter=activation_parameter,
+            input_scale=input_scale,
+        )
         continuation_all = phi_all @ theta
         intrinsic = payoff[t]
         exercise_now = (intrinsic > 0.0) & (intrinsic >= continuation_all)
@@ -370,6 +472,9 @@ def fit_rlsm_policy_from_paths(
         ridge_lambda=float(ridge_lambda),
         reinit_per_step=bool(reinit_per_step),
         input_dim=input_dim,
+        activation_parameter=float(activation_parameter),
+        input_scale=float(input_scale),
+        use_payoff_as_input=bool(use_payoff_as_input),
         train_indices=train_indices,
         eval_indices=eval_indices,
         weights_by_step=weights_template,
