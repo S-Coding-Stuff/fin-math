@@ -1,6 +1,8 @@
 """Regression helpers for LSM continuation value estimation."""
 
 import numpy as np
+import torch
+import torch.nn as nn
 
 
 def estimate_continuation_nn(
@@ -19,13 +21,6 @@ def estimate_continuation_nn(
 
     Returns predictions aligned to the input states order.
     """
-    try:
-        import torch
-        import torch.nn as nn
-    except ImportError as exc:  # pragma: no cover - environment dependent
-        raise ImportError(
-            "Neural-network LSM regression requires PyTorch. Install with `pip install torch`."
-        ) from exc
 
     if min_samples < 1:
         raise ValueError("min_samples must be >= 1.")
