@@ -330,6 +330,7 @@ def fit_rlsm_policy_from_paths(
     train_eval_split: float = 0.5,
     payoff_fn: PayoffFn | None = None,
     state_fn: StateFn | None = None,
+    train_itm_only: bool = False,
     use_payoff_as_input: bool = False,
     factors: tuple[float, ...] = (1.0,),
     optstop_compatible: bool = False,
@@ -412,10 +413,22 @@ def fit_rlsm_policy_from_paths(
 
     for t in range(n_steps - 1, -1, -1):
         A, b = weights_template[t]
+        selected_train_indices = train_indices
+        if train_itm_only:
+            selected_train_indices = train_indices[payoff[t, train_indices] > 0.0]
+        train_count_by_step[t] = int(selected_train_indices.size)
+        if selected_train_indices.size == 0:
+            fallback_by_step[t] = 0.0
+            theta_by_step[t] = np.array([], dtype=float)
+            intrinsic = payoff[t]
+            exercise_now = intrinsic > 0.0
+            cashflow = np.where(exercise_now, intrinsic, cashflow * discount)
+            continue
+
         train_features = _state_features(
-            cube[t, train_indices, :],
+            cube[t, selected_train_indices, :],
             state_fn=state_fn,
-            payoff_values=payoff[t, train_indices],
+            payoff_values=payoff[t, selected_train_indices],
             use_payoff_as_input=use_payoff_as_input,
             expected_dim=input_dim,
         )
@@ -427,7 +440,7 @@ def fit_rlsm_policy_from_paths(
             activation_parameter=activation_parameter,
             input_scale=input_scale,
         )
-        target_train = cashflow[train_indices] * discount
+        target_train = cashflow[selected_train_indices] * discount
         theta = _solve_last_layer(phi_train, target_train, ridge_lambda=ridge_lambda)
         pred_train = phi_train @ theta
         fit_mse_by_step[t] = float(np.mean((pred_train - target_train) ** 2))

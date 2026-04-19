@@ -101,10 +101,10 @@ class BinomialFiniteDifference:
         if T - h <= 0.0:
             up = self._price(T=T + h)
             mid = self._price(T=T)
-            return (up - mid) / h
+            return -(up - mid) / h
         up = self._price(T=T + h)
         dn = self._price(T=T - h)
-        return (up - dn) / (2.0 * h)
+        return -(up - dn) / (2.0 * h)
 
     def rho(self) -> float:
         h = float(self.bumps.r)

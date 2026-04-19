@@ -428,7 +428,10 @@ class MonteCarloFiniteDifference:
             coeffs, *_ = np.linalg.lstsq(design, prices, rcond=None)
             return float(2.0 * coeffs[2])
 
-        return first_derivative(param_name, base_value, bump_value)
+        value = first_derivative(param_name, base_value, bump_value)
+        if kind_l == "theta":
+            return -value
+        return value
 
     def price(self) -> tuple[float, float]:
         return self._price()
