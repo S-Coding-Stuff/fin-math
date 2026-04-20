@@ -1,6 +1,6 @@
 # 📈 Financial Mathematics - Options Pricing Dissertation Code
 
-This repository implements option pricing models, ranging from classical models to newer machine learning models. 
+This repository is used as code for the dissertation project: "Monte Carlo pricing of American Options." Stage Six remains unused due to inconclusive results from my own implementation, however we utilise OptStopRandNN instead as a deep learning alternative to the Longstaff-Schwartz method.
 
 ## Features
 
@@ -38,7 +38,7 @@ This repository implements option pricing models, ranging from classical models 
   - ✅ Bounds of a high-dimensional hypercube
   - ✅ Koksma-Hlawka Inequality
   - ✅ Faure, Halton, Sobol Sequences
-  - Randomised QMC
+  - ✅ Randomised QMC
 
 ### Stage Five
 - Develop methods for finding sensitivities:
@@ -47,8 +47,8 @@ This repository implements option pricing models, ranging from classical models 
   - ✅ Pathwise Derivative Estimates
   - (Extra) Likelihood Ratio Method ~ Theoretical learning, not implemented
 
-### Stage Six
-- Implement Machine Learning Models:
+### Stage Six - Unused
+- Researched Machine Learning Models:
     - ✅ Logistic Regression
     - ✅ Random Forest
     - ✅ Support Vector Machine
@@ -56,7 +56,7 @@ This repository implements option pricing models, ranging from classical models 
   - Notebook: `notebooks/lsm_ml_model_comparison.ipynb`
 
 ### Extension(s)
-- Extend to multi-dimensional Amerian options i.e. vector/tensor inputs rather than single-asset
+- ✅ Extend to multi-dimensional Amerian options i.e. vector/tensor inputs rather than single-asset
 - Create more realistic setups - Dividends, Transaction Costs, Stochastic Interest Rates (Heston Model)
 - Exotic Options - Bermudan Options, Shout/Chooser-lite, European Digital, Asian
 
