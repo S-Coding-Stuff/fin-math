@@ -48,9 +48,12 @@ notebooks/results/
 Dissertation-18.pdf
 assets/
 experimental/
-OptStopRandNN/
 run_american_delta_gamma_experiments.py
 tests/
 plots/
-OptStopRandNN/
+OptStopRandNN/output/
 notebooks/
+ml/lsm_qmc_experiments.py
+ml/convert_data.ipynb
+greeks_experiment.py
+basket_greeks_experiment.py

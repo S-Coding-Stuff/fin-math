@@ -128,7 +128,7 @@ def _continuation_mask(paths: np.ndarray, payoff: np.ndarray, *, strike: float, 
         for t in range(n_steps - 1):
             ref_state = _feature_matrix(paths[t], state_fn=state_fn)[:, 0]
             mask[t] |= np.abs(ref_state - strike) <= mask_tolerance
-        return mask
+    return mask
 
 
 def _copy_state_dict(model: nn.Module) -> dict[str, torch.Tensor]:
