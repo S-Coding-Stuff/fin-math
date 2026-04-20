@@ -82,17 +82,6 @@ cd OptStopRandNN
 ls -t output/metrics_draft/*.csv | head
 ```
 
-Run the built-in Black-Scholes Greek sweep with the helper script:
-
-```sh
-cd OptStopRandNN
-bash scripts/run_black_scholes_greeks.sh \
-  --method both \
-  --jobs 1 \
-  --algos LSM,NLSM,RLSM,RLSMSoftplus \
-  --path-samplers mc,mc_antithetic,sobol_seq,sobol_bb,sobol_scrambled_seq,sobol_scrambled_bb
-```
-
 Run the same central-difference Greek sweep directly:
 
 ```sh
