@@ -1,17 +1,17 @@
-# 📈 Financial Mathematics - Options Pricing Dissertation Code
+# Options Pricing Dissertation Code
 
 This repository is used as code for the dissertation project: "Monte Carlo pricing of American Options." Stage Six remains unused due to inconclusive results from my own implementation, however we utilise OptStopRandNN instead as a deep learning alternative to the Longstaff-Schwartz method.
 
 ## Features
 
-- 📉 **Black Scholes Model** (European Calls and Puts)
-- 🌲 **Binomial Tree Pricing** for European and American options
-- 🎰 **Monte Carlo Pricing** with Geometric Brownian Motion
-- 🧮 **American Option Pricing (Longstaff–Schwartz)** with monomial and polynomial regression bases
-- 🎯 **Quasi-Monte Carlo Drivers** (Sobol, Faure, Halton-style sequences) with Brownian bridge
-- 📐 **Sensitivity Methods**: finite-difference Greeks for Black–Scholes, Binomial and Monte Carlo
-- 🖼️ **Path Visualisation** and Payoff Plotting
-- 👨‍💻 **Data Gathering** for Stocks and their respective Options
+- **Black Scholes Model** (European Calls and Puts)
+- **Binomial Tree Pricing** for European and American options
+- **Monte Carlo Pricing** with Geometric Brownian Motion
+- **American Option Pricing (Longstaff–Schwartz)** with monomial and polynomial regression bases
+- **Quasi-Monte Carlo Drivers** (Sobol, Faure, Halton-style sequences) with Brownian bridge
+- **Sensitivity Methods**: finite-difference Greeks for Black–Scholes, Binomial and Monte Carlo
+- **Path Visualisation** and Payoff Plotting
+- **Data Gathering** for Stocks and their respective Options
 
 ## 🛣️ Roadmap
 ### Stage One
