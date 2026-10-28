@@ -13,7 +13,7 @@ This repository is used as code for the dissertation project: "Monte Carlo prici
 - **Path Visualisation** and Payoff Plotting
 - **Data Gathering** for Stocks and their respective Options
 
-## 🛣️ Roadmap
+## Roadmap
 ### Stage One
 - ✅ Implement Black-Scholes model for European Call and Put Options
 - ✅ Implement Greeks
